@@ -22,8 +22,9 @@ source(paste0(here::here(), "/0-config.R"))
 source(paste0(here(),"/0-project-functions/0_clean_study_data_functions.R"))
 source(paste0(here(),"/0-project-functions/0_descriptive_epi_shared_functions.R"))
 
-dd <- readRDS(file=here("results/KI_metadata_wasting.RDS"))
+dd <- readRDS(file=paste0(res_dir,"KI_metadata_wasting.RDS"))
 
+assert_that(all(monthly_cohorts %in%  unique(dd$studyid)))
 
 
 #-----------------------------------
@@ -58,7 +59,8 @@ dd <- mutate(dd,
                                    levels=unique(studycountry[order(overall_wastprev)]), 
                                    ordered=TRUE))
 levels(dd$studycountry)
-
+length(unique(dd$studycountry))
+unique(dd$short_description)
 
 # categorize wasting prevalence
 dd$wpcat <- cut(dd$overall_wastprev,breaks=c(0,5,10,20,30,40,50,60,100),labels=c("<5","5-10","10-20","20-30","30-40","40-50","50-60",">60"))
@@ -328,19 +330,18 @@ nagebar <- ggplot(dd, aes(y = N/1000, x = as.numeric(agecat))) +
 
 
 # add margin around plots
-wastphm2 = wastphm + theme(plot.margin = unit(c(0, 0.25, 0, 0.25), "cm"))
+wastphm2 = wastphm + theme(plot.margin = unit(c(0.5, 0.5, 0, 1), "cm")) #t = 0, r = 0, b = 0, l = 0
 # wpbar2 = wpbar + theme(plot.margin = unit(c(1.6,0.3,0.9,0.1), "cm"))
 # nbar2 = nbar + theme(plot.margin = unit(c(1.6,0.25,0.9,0.1), "cm"))
-nbar2 = nbar + theme(plot.margin = unit(c(1,0.25,1.3,0.1), "cm"))
-wpbar2 = wpbar + theme(plot.margin = unit(c(1,0.3,1.3,0.1), "cm"))
-nagebar2 = nagebar + theme(plot.margin = unit(c(0.15,0.13, -0.9 ,4.05), "cm"))
+nbar2 = nbar + theme(plot.margin = unit(c(1,0.25,0.75,0.1), "cm"))
+wpbar2 = wpbar + theme(plot.margin = unit(c(1,0.3,0.75,0.1), "cm"))
+nagebar2 = nagebar + theme(plot.margin = unit(c(0.15,0.41,-0.9,5.13), "cm"))
 empty <- grid::textGrob("")
 
 awstpgrid <- grid.arrange(nagebar2,empty, empty,
                           wastphm2, nbar2, wpbar2, nrow = 2, ncol = 3,
                           heights = c(25,100),
                           widths=c(100,20,20))
-
 
 
 # define standardized plot names
@@ -355,7 +356,7 @@ awstpgrid_name = create_name(
 )
 
 # save plot and underlying data
-ggsave(filename=here(paste0("figures/wasting/fig-",awstpgrid_name, ".pdf")),
+ggsave(filename=paste0(fig_dir,"wasting/fig-",awstpgrid_name, ".pdf"),
       plot = awstpgrid,device='pdf',width=12,height=8)
 saveRDS(list(dd = dd,
              dp = dp),

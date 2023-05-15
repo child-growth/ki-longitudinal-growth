@@ -53,14 +53,14 @@ summary.prev.haz <- function(d, severe.stunted=F, method="REML"){
   # cohort specific results
   prev.cohort=lapply((levels(prev.data$agecat)),function(x) 
     fit.escalc(data=prev.data,ni="nmeas", xi="nxprev",age=x,meas="PLO"))
-  prev.cohort=as.data.frame(rbindlist(prev.cohort))
+  prev.cohort=as.data.frame(rbindlist(prev.cohort, fill=TRUE))
   prev.cohort=cohort.format(prev.cohort,y=prev.cohort$yi,
                             lab=  levels(prev.data$agecat))
   
   # estimate random effects, format results
   prev.res=lapply((levels(prev.data$agecat)), function(x)
     fit.rma(data=prev.data, ni="nmeas", xi="nxprev",age=x ,measure="PLO",nlab="children", method=method))
-  prev.res=as.data.frame(rbindlist(prev.res))
+  prev.res=as.data.frame(rbindlist(prev.res,fill=TRUE))
   prev.res$est=as.numeric(prev.res$est)
   prev.res$lb=as.numeric(prev.res$lb)
   prev.res$ub=as.numeric(prev.res$ub)
@@ -189,7 +189,7 @@ summary.ci <- function(d,  severe.stunted=F, birthstrat=F,
   # estimate random effects, format results
   ci.res=lapply((agelist),function(x)
     fit.rma(data=cuminc.data,ni="N", xi="ncases",age=x,measure="PLO",nlab=" measurements", method=method))
-  ci.res=as.data.frame(rbindlist(ci.res))
+  ci.res=as.data.frame(rbindlist(ci.res, fill=TRUE))
   ci.res = ci.res %>%
     mutate(est=est*100, lb=lb*100, ub=ub*100)
   ci.res$ptest.f=sprintf("%0.0f",ci.res$est)
@@ -245,7 +245,7 @@ summary.haz <- function(d, method="REML", nmeas_threshold = 50){
   # cohort specific results
   haz.cohort=lapply(as.list(levels(haz.data$agecat)),function(x) 
     fit.escalc(data=haz.data, ni="nmeas", yi="meanhaz", vi="varhaz", measure="GEN",age=x))
-  haz.cohort=as.data.frame(rbindlist(haz.cohort))
+  haz.cohort=as.data.frame(rbindlist(haz.cohort, fill=TRUE))
   haz.cohort=cohort.format(haz.cohort,y=haz.cohort$yi,
                            lab=  levels(haz.data$agecat), est="mean")
   
@@ -253,7 +253,7 @@ summary.haz <- function(d, method="REML", nmeas_threshold = 50){
   # estimate random effects, format results
   haz.res=lapply(as.list(levels(haz.data$agecat)),function(x) 
     fit.rma(data=haz.data, ni="nmeas", yi="meanhaz", vi="varhaz", nlab="children",age=x, measure = "GEN", method=method))
-  haz.res=as.data.frame(rbindlist(haz.res))
+  haz.res=as.data.frame(rbindlist(haz.res, fill=TRUE))
   haz.res$agecat=factor(levels(haz.data$agecat))
   haz.res$ptest.f=sprintf("%0.2f",haz.res$est)
   
@@ -433,7 +433,7 @@ summary.stunt.incprop <- function(d, severe.stunted=F, agelist=list("0-3 months"
   # estimate random effects, format results
   ci.res=lapply((agelist),function(x)
     fit.rma(data=cuminc.data,ni="N", xi="ncases",age=x,measure="PLO",nlab=" measurements",method=method))
-  ci.res=as.data.frame(rbindlist(ci.res))
+  ci.res=as.data.frame(rbindlist(ci.res, fill=TRUE))
   ci.res = ci.res %>%
     mutate(est=est*100, lb=lb*100, ub=ub*100)
   ci.res$ptest.f=sprintf("%0.0f",ci.res$est)
@@ -467,7 +467,14 @@ summary.stunt.incprop <- function(d, severe.stunted=F, agelist=list("0-3 months"
 create_stunting_age_indicators = function(data, create_agecats = TRUE){
   # create age categories, if needed
   if (create_agecats){
-    data = create_age_categories(data)
+    data = data %>% group_by(studyid, country, subjid) %>% 
+      # create age categories
+      mutate(agecat = case_when(
+        agedays <= 7 ~ "Birth",
+        agedays >7 & agedays<= 30.4167*6 ~ "0-6 months",
+        agedays >30.4167*6 & agedays<= 30.4167*15 ~ "6-15 months",
+        TRUE ~ ""
+      ))
   } else {
     data = data %>% 
       group_by(studyid, country, subjid, sex, agecat) %>%
@@ -475,6 +482,9 @@ create_stunting_age_indicators = function(data, create_agecats = TRUE){
       select(c(studyid, country, subjid, sex, agecat, haz, region, tr, measurefreq))
   }
 
+  # Drop if agecat missing
+  data = data %>% filter(agecat!="")
+  
   #Calculate onset of stunting
   data_processed <- data %>% group_by(studyid, country, subjid) %>% 
     # create id for each measurement within child
@@ -499,13 +509,11 @@ create_stunting_age_indicators = function(data, create_agecats = TRUE){
     filter(stunt_inc==1) %>%
     mutate(
       stunt_inc_birth = ifelse(stunt_inc == 1 & agecat == "Birth", 1, 0),
-      stunt_inc_3m = ifelse(stunt_inc == 1 & agecat == "0-3 months", 1, 0),
-      stunt_inc_6m = ifelse(stunt_inc == 1 & agecat == "3-6 months", 1, 0),
-      stunt_inc_9m = ifelse(stunt_inc == 1 & agecat == "6-9 months", 1, 0),
-      stunt_inc_12m = ifelse(stunt_inc == 1 & agecat == "9-12 months", 1, 0),
-      stunt_inc_15m = ifelse(stunt_inc == 1 & agecat == "12-15 months", 1, 0)
+      stunt_inc_6m = ifelse(stunt_inc == 1 & agecat == "0-6 months", 1, 0),
+      stunt_inc_15m = ifelse(stunt_inc == 1 & agecat == "6-15 months", 1, 0)
     ) %>% 
-    select(c("studyid", "subjid", "country", "region", "measurefreq", "tr", "sex", "stunt_inc_birth", "stunt_inc_3m", "stunt_inc_6m", "stunt_inc_9m", "stunt_inc_12m", "stunt_inc_15m"))
+    select(c("studyid", "subjid", "country", "region", "measurefreq", "tr", "sex", "stunt_inc_birth", 
+             "stunt_inc_6m","stunt_inc_15m"))
 
   # create never stunted category
   data_never_st <- data_processed %>%
@@ -519,7 +527,7 @@ create_stunting_age_indicators = function(data, create_agecats = TRUE){
 
   # check that incident stunting categories do not overlap
   test_inc_cat <- data_st_ind %>% 
-    mutate(sum_cats = stunt_inc_birth + stunt_inc_3m + stunt_inc_6m + stunt_inc_9m + stunt_inc_12m + stunt_never) 
+    mutate(sum_cats = stunt_inc_birth + stunt_inc_6m + stunt_inc_15m + stunt_never) 
   
   assert_that(max(test_inc_cat$sum_cats[!is.na(test_inc_cat$sum_cats)]) == 1,
               msg = "Check coding of incidence; some children have
@@ -528,15 +536,12 @@ create_stunting_age_indicators = function(data, create_agecats = TRUE){
   data_st_ind = data_st_ind %>% 
     mutate(stunt_inc_age = case_when(
       stunt_inc_birth == 1 ~ "Birth",
-      stunt_inc_3m == 1 ~ "0-3 months",
-      stunt_inc_6m == 1 ~ "3-6 months",
-      stunt_inc_9m == 1 ~ "6-9 months",
-      stunt_inc_12m == 1 ~ "9-12 months",
-      stunt_inc_15m == 1 ~ "12-15 months",
+      stunt_inc_6m == 1 ~ "0-6 months",
+      stunt_inc_15m == 1 ~ "6-15 months",
       stunt_never == 1 ~ "Never"
     )) %>%
     select(-c(agecat, stunt_inc_birth,
-              stunt_inc_3m, stunt_inc_6m, stunt_inc_9m, stunt_inc_12m, stunt_inc_15m, stunt_never))
+              stunt_inc_6m, stunt_inc_15m, stunt_never))
 
   return(data_st_ind)
 }

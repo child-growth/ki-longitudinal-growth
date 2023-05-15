@@ -102,19 +102,42 @@ name_prev_plots <- function(cut=2, pop, loc="", ana) {
 # Stunting cumulative incidence + incidence proportion (primary)
 #-------------------------------------------------------------------------------------------
 
-plot_ci_inc <- function(d, meas=c("Cumulative incidence", "Incidence proportion"), birth, sev, ...) {
-  ki_combo_plot(d,
-                Disease="Stunting",
-                Measure=meas, 
-                Birth=birth, 
-                Severe=sev, 
-                Age_range="3 months", 
-                Cohort="pooled",
-                xlabel="Child age, months",
-                h1=90,
-                h2=90,
-                ...)
+plot_ip <- function(d, meas="Incidence proportion", birth, sev, ...) {
+  ki_ip_flurry_plot(d,
+                    Disease="Stunting",
+                    Measure=meas,
+                    Birth=birth,
+                    Severe=sev,
+                    Age_range="3 months",
+                    xlabel="Child age, months",
+                    h1=90,
+                    h2=90,
+                    ...)
 }
+
+# d is data frame with subgroup pooled estimates only
+# d_cohort is data frame with cohort-specific estimates only
+plot_ip_subgroup <- function(d, d_cohort, subgroup_name, subgroup_colors,meas="Incidence_proportion", birth, sev, subgroup, title, ...) {
+  
+    ki_ip_flurry_subgroup_plot(d,
+                               d_cohort,
+                               subgroup_name,
+                               subgroup_colors,
+                      Disease="Stunting",
+                      Measure=meas, 
+                      Birth=birth, 
+                      Severe=sev, 
+                      Age_range="3 months", 
+                      xlabel="Child age, months",
+                      h1=90,
+                      h2=90,
+                      subgroup=subgroup,
+                      title =title,
+                      ...)
+
+}
+
+
 
 # define standardized plot names
 name_inc_plots <- function(cut=2, pop, loc="", ana) {
@@ -148,4 +171,21 @@ plot_ip_by_reg <- function(reg) {
     returnData = T,
     Region = reg
   )
+}
+
+
+# get N's for subgroup analysis plots
+get_N_subgroup <- function(d, subgroup){
+  d %>%
+    filter(disease == "Stunting" &
+             measure== "Incidence_proportion" &
+             age_range == "3 months" &
+             birth == "strat" &
+             cohort == "pooled" &
+             severe == "no") %>%
+    group_by(!!sym(subgroup)) %>%
+    summarise(min_study = min(nstudies, na.rm=TRUE),
+              max_study = max(nstudies, na.rm=TRUE),
+              min_n = min(nmeas, na.rm=TRUE),
+              max_n = max(nmeas, na.rm=TRUE))  
 }

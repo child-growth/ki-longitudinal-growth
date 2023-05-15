@@ -10,7 +10,11 @@ library(EValue)
 
 
 #Load data
-d <- readRDS(paste0(here::here(),"/results/rf results/pooled_RR_results.rds"))
+d <- readRDS(paste0(BV_dir,"/results/rf results/pooled_RR_results.rds"))
+
+unique(d$intervention_variable)
+
+d <- d %>% filter(!(intervention_variable %in% c("anywast06","pers_wast","enstunt","enwast","trth2o","lag_WHZ_quart","single")))
 
 
 #Drop reference levels
@@ -73,15 +77,16 @@ df$EVals_lb[is.na(df$EVals_lb)] <- 1
 
 
 p <- ggplot(df, aes(x=RFlabel, y=EVals_lb)) + geom_point(alpha=0.1) + #geom_smooth(color="red") +
-  geom_point(aes(y=medianEval_lb), color=tableau10[2], size=2) +
+  geom_point(aes(y=medianEval_lb), color=tableau10[2], size=4) +
   geom_hline(aes(yintercept=1)) + 
   coord_cartesian(ylim = c(1, 16)) +
   scale_y_continuous(breaks= c(1.00, 1.5, 2.00, 2.5, 3, 4.00, 6, 8, 12, 16), trans='log10', labels=scaleFUN) +
   xlab("Exposure") + ylab("E value") +
   theme(
     axis.text.x = element_text(size=12, angle=90)) 
+p
 
-ggsave(p, file=paste0("C:/Users/andre/Documents/HBGDki/ki-longitudinal-manuscripts/figures/risk-factor/fig-Evalues.png"), height=10, width=8)
+ggsave(p, file=paste0(BV_dir,"/figures/risk-factor/fig-Evalues.png"), height=10, width=8)
 
 
 

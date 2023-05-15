@@ -16,7 +16,8 @@ d$agecat <- cut(d$agedays,
                 labels = paste0(0:24))
 table(d$agecat)
 
-
+d<-d %>% filter(studyid=="CMIN GB94")
+length(unique(d$subjid))
 
 #get summary statistics
 df <- d %>% group_by(studyid, country, region) %>%
@@ -29,7 +30,7 @@ head(df)
 
 
 #merge in start year of each cohort
-start_year <- readRDS(here("/data/study_start_years.rds"))
+start_year <- readRDS(paste0(BV_dir,"/data/study_start_years.rds"))
 
 df <- left_join(df, start_year, by=c("studyid", "country"))
 
@@ -40,7 +41,7 @@ head(df)
 
 df$region <- as.character(df$region)
 
-saveRDS(df, file=here("results/KI_metadata_stunting.RDS"))
+saveRDS(df, file=paste0(BV_dir,"/results/KI_metadata_stunting.RDS"))
 
 
 

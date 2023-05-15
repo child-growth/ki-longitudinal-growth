@@ -22,7 +22,7 @@ df <- d %>% select(studyid, country, region, subjid, wasting_episode, episode_id
                    a3=lead(agedays, 3)-agedays, a4=lead(agedays, 4)-agedays) %>% 
   filter(wast_rec==1)
 
-#N obs and childre
+#N obs and children
 df %>% ungroup() %>% summarize(n(), length(unique(paste0(subjid, subjid))))
 
 df$l1[df$a1 > 3 * 30.4167] <- NA       
@@ -47,7 +47,6 @@ summary(df$recZ)
 df <- calc.ci.agecat(df, range=6)
 df$agecat <- as.character(df$agecat)
 df$agecat[df$wasting_episode=="Born Wasted"] <- "Birth"
-#df$agecat[df$agecat %in% c("12-18 months", "18-24 months")] <- "12-24 months"
 df <- df %>% filter(agecat!="18-24 months")
 df$agecat <- factor(df$agecat, levels=c("Birth", "0-6 months", "6-12 months", "12-18 months"))
 table(df$agecat)
@@ -80,15 +79,31 @@ df <- df %>% group_by(agecat) %>%
                                 agedays==first(agedays), firstMedianRecZ,NA))
 
 rec_violin_plot = ggplot(df,aes(x=agecat, y=recZ, fill = agecat)) + 
-  geom_violin(alpha=0.5, draw_quantiles = c(0.25, 0.5, 0.75)) + 
-   geom_text(aes(y=firstMedianRecZ+0.1,  label=(round(firstMedianRecZ,2)))) +
-  geom_text(data=pvals, aes(x=comp, y=-3, label=pvalcat, fill = NULL)) +
+  geom_violin(alpha=0.2, draw_quantiles = c(0.25, 0.5, 0.75)) + 
+  geom_point(data=df %>% group_by(studyid, agecat) %>% summarize(recZ = mean(recZ)),
+             color = "#464646", fill = "#464646",
+             size = 1.5,
+             position = position_jitter(width = 0.05)) +
+  
+   geom_text(aes(y=firstMedianRecZ+0.1,  label=(round(firstMedianRecZ,2))), hjust=-1) +
+   geom_text(data=pvals, aes(x=comp, y=-3, label=pvalcat, fill = NULL)) +
    ylab("Mean Weight-for-length Z-score\nwithin 3 months of recovery")+
    xlab("Age at wasting episode onset")+
    geom_hline(yintercept = -2, linetype="dashed") +
    scale_fill_manual(values=rep("grey30", 4)) +
    coord_cartesian(ylim=c(-3,2))
 rec_violin_plot
+
+
+rec_violin_plot_no_cohort = ggplot(df,aes(x=agecat, y=recZ, fill = agecat)) + 
+  geom_violin(alpha=0.2, draw_quantiles = c(0.25, 0.5, 0.75)) + 
+  geom_text(aes(y=firstMedianRecZ+0.1,  label=(round(firstMedianRecZ,2))), hjust=.5) +
+  ylab("Mean Weight-for-length Z-score\nwithin 3 months of recovery")+
+  xlab("Age at wasting episode onset")+
+  geom_hline(yintercept = -2, linetype="dashed") +
+  scale_fill_manual(values=rep("grey30", 4)) +
+  coord_cartesian(ylim=c(-3,2))
+rec_violin_plot_no_cohort
 
 
 # define standardized plot names
@@ -103,9 +118,9 @@ rec_violin_name = create_name(
 )
 
 # save plot and underlying data
-ggsave(rec_violin_plot, file=paste0(here(),"/figures/wasting/fig-", rec_violin_name, ".png"), width=8, height=5)
+ggsave(rec_violin_plot, file=paste0(BV_dir,"/figures/wasting/fig-", rec_violin_name, ".png"), width=8, height=5)
 
-saveRDS(rec_violin_plot, file=paste0(here::here(),"/figures/plot-objects/rec_violin_plot_object.rds"))
+saveRDS(rec_violin_plot, file=paste0(BV_dir,"/figures/plot-objects/rec_violin_plot_object.rds"))
 
 #Get N's for figure caption
 df %>% ungroup() %>% filter(agedays <= 24*30.4167) %>% 

@@ -1,6 +1,6 @@
 
 rm(list=ls())
-.libPaths( c( "/data/KI/R/x86_64-pc-linux-gnu-library/3.6/" , .libPaths() ) )
+.libPaths( c( "/data/KI/R/x86_64-pc-linux-gnu-library/4.0/" , .libPaths() ) )
 
 source(paste0(here::here(), "/0-config.R"))
 .libPaths( "~/rlibs" )
@@ -28,7 +28,7 @@ writeLines(jsonlite::toJSON(enumerated_analyses),"seasonality_rf_cont_analyses.j
 
 # 2. run batch
 configure_cluster(here("0-project-functions","cluster_credentials.json"))
-rmd_filename <- system.file("templates/longbow_RiskFactors.Rmd", package="longbowRiskFactors")
+rmd_filename <- here("4-longbow-tmle-analysis/run-longbow/longbow_RiskFactors.Rmd")
 
 # send the batch to longbow (with provisioning disabled)
 batch_inputs <- "seasonality_rf_cont_analyses.json"
@@ -49,5 +49,5 @@ obs_counts <- load_batch_results("obs_counts.rdata", results_folder = "seasonali
 # save concatenated results
 filename1 <- paste(paste('seasonality_rf_cont_results',Sys.Date( ),sep='_'),'RDS',sep='.')
 filename2 <- paste(paste('seasonality_rf_cont_results_obs_counts',Sys.Date( ),sep='_'),'RDS',sep='.')
-saveRDS(results, file=here("results","rf results","raw longbow results",filename1))
-saveRDS(obs_counts, file=here("results","rf results","raw longbow results",filename2))
+saveRDS(results, file=paste0(res_dir,"rf results/raw longbow results/",filename1))
+saveRDS(obs_counts, file=paste0(res_dir,"rf results/raw longbow results/",filename2))

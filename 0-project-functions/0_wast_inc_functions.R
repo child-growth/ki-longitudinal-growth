@@ -122,7 +122,6 @@ WastIncCalc<-function(d, washout=60, dropBornWasted=F, stunt=F){
   d$sevwastchange[d$firstmeasure] <- d$sevwast[d$firstmeasure]
   d$midpoint_age[is.na(d$midpoint_age)] <- d$agedays[is.na(d$midpoint_age)]/2
   d <- d %>% group_by(subjid) %>% mutate(next_midpoint = lead(midpoint_age), last_midpoint = lag(midpoint_age))
-  #                                        delta_age = next_midpoint-midpoint_age)
   d$delta_age[d$firstmeasure] <-d$agedays[d$firstmeasure]
   
   #Length of each observation period  
@@ -182,38 +181,6 @@ WastIncCalc<-function(d, washout=60, dropBornWasted=F, stunt=F){
   d$wast_inc[d$wastchange!=1 | d$past_wast==1] <- 0 
   d$wast_rec_inc[d$wastchange!= -1 | d$future_wast==1] <- 0  
   
-  #FIXED!
-  
-  #Remove incidences of wasting if there has not been recovery from prior wasting episode
-  #Is there a cleaner way of preventing recording the incidences earlier?
-  #In a few rare cases, recovery hasn't occured yet, but d$wastchange==1 & d$past_wast==0
-  #This happens if, for the first nonwasted measure after a series of wasted ones, the next
-  #wasting episode is within 60 days (so no recovery), but from that wasting episode, it looks
-  #like there has been 60 days without wasting (so incident episode), because the last wasted measure
-  #is beyond the 60 day period.
-  # table(d$wast_inc)
-  # table(d$wast_rec_inc)
-  # 
-  # d <- d %>% group_by(subjid) %>% 
-  #   mutate(sum_wast_inc=cumsum(wast_inc),
-  #          sum_wast_rec=cumsum(wast_rec_inc))
-  # for(i in 1:nrow(d)){
-  #   if(d$wast_inc[i]==1 & (d$sum_wast_inc[i]-d$sum_wast_rec[i] > 1)){
-  #     d$wast_inc[i] <- 0 
-  #     d$past_wast[i] <- 1
-  #     d <- d %>% group_by(subjid) %>% 
-  #       mutate(sum_wast_inc=cumsum(wast_inc),
-  #              sum_wast_rec=cumsum(wast_rec_inc))        
-  #   }
-  #   if(d$wast_rec_inc[i]==1 & (d$sum_wast_inc[i]-d$sum_wast_rec[i] < 0)){
-  #     d$wast_rec_inc[i] <- 0 
-  #     d$future_wast[i] <- 1
-  #     d <- d %>% group_by(subjid) %>% 
-  #       mutate(sum_wast_inc=cumsum(wast_inc),
-  #              sum_wast_rec=cumsum(wast_rec_inc))  
-  #   }
-  # }
-  # table(d$wast_inc)
     
   #Indicate length of incident episodes
   d$wasting_episode <- rep(NA, nrow(d))
@@ -271,10 +238,7 @@ WastIncCalc<-function(d, washout=60, dropBornWasted=F, stunt=F){
   d$wasting_duration <- NA
   d$wasting_duration[d$wasting_episode=="Wasted"] <- d$duration[d$wasting_episode=="Wasted"]
   
-  #View duration calculations
-  # df <- d %>% subset(., select=c(subjid, agedays, whz, wast_rec_inc, wasting_episode, episode_ID, duration))
-  # View(df)
-  
+
   #---------------------------------------------------------
   #Calculate severe wasting and severe wasting recovery incidence and risk
   #---------------------------------------------------------    
@@ -394,23 +358,19 @@ WastIncCalc<-function(d, washout=60, dropBornWasted=F, stunt=F){
   
   d <- d %>% group_by(subjid) %>% arrange(subjid, agedays) %>% mutate(end_recovery=1*(last(wast_rec_inc)==1))
   
-  #d$incident_time_into_period <- d$delta_age/2
   d$incident_time_into_period <- d$period_length/2
-  #d$incident_time_into_period <- 0
   d$delta_age <- d$midpoint_age - d$last_midpoint
   
   #calculate person time for each incidence outcome
-  d$pt_wast <- d$delta_age * d$wast_risk #- d$incident_time_into_period * d$wast_inc + d$incident_time_into_period * d$wast_rec_inc + d$delta_age * d$wast_washout 
-  d$pt_sevwast <- d$delta_age * d$sevwast_risk #- d$incident_time_into_period * d$sevwast_inc  + d$incident_time_into_period * d$sevwast_rec_inc
-  d$pt_wast_rec <- d$delta_age * d$wast_rec_risk #- d$incident_time_into_period * d$wast_rec_inc + d$incident_time_into_period * (d$wast_inc + d$born_wast_inc)
-  d$pt_sevwast_rec <- d$delta_age * d$sevwast_rec_risk #- d$incident_time_into_period * d$sevwast_rec_inc + d$incident_time_into_period * (d$sevwast_inc + d$born_sevwast_inc)
+  d$pt_wast <- d$delta_age * d$wast_risk 
+  d$pt_sevwast <- d$delta_age * d$sevwast_risk 
+  d$pt_wast_rec <- d$delta_age * d$wast_rec_risk
+  d$pt_sevwast_rec <- d$delta_age * d$sevwast_rec_risk 
   d$pt_washout <- d$delta_age * d$wast_washout 
-  #pt_washout <- ifelse(d$end_recovery==0, sum(d$wast_rec_inc) * 60, (sum(d$wast_rec_inc)-1) * 60)
   sum(d$pt_wast, na.rm=T) 
   sum(d$pt_wast_rec, na.rm=T) 
-  #sum(d$pt_wast + d$pt_wast_rec + d$pt_washout, na.rm=T) #Should be 35800 in the test data.
-  #sum(d$pt_wast + d$pt_wast_rec + pt_washout, na.rm=T) #Should be 35800 in the test data.
-  sum(d$pt_wast + d$pt_wast_rec, na.rm=T) #Should be 35800 in the test data.
+
+  sum(d$pt_wast + d$pt_wast_rec, na.rm=T) 
   
   #Drop intermediate variables
   d <- subset(d, select = -c(agelag, wastlag, sevwastlag, midpoint_age, wastchange, sevwastchange, past_wast, past_sevwast,

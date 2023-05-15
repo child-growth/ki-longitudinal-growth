@@ -6,10 +6,14 @@ source(paste0(here::here(), "/0-project-functions/0_risk_factor_functions.R"))
 
 
 #Load data
-dfull_adj <- readRDS(paste0(here::here(),"/results/rf results/full_RF_results.rds"))
-dfull_unadj <- readRDS(paste0(here::here(),"/results/rf results/full_RF_unadj_results.rds"))
+dfull_adj <- readRDS(paste0(BV_dir,"/results/rf results/full_RF_results.rds"))
+dfull_unadj <- readRDS(paste0(BV_dir,"/results/rf results/full_RF_unadj_results.rds"))
 dfull <- rbind(dfull_adj,dfull_unadj)
 dfull <- distinct(dfull)
+
+dfull_adj <- dfull_adj %>% filter(!(intervention_variable %in% c("anywast06","pers_wast","enstunt","enwast","trth2o")))
+dfull_unadj <- dfull_unadj %>% filter(!(intervention_variable %in% c("anywast06","pers_wast","enstunt","enwast","trth2o")))
+
 
 head(dfull)
 
@@ -54,6 +58,7 @@ table(!is.na(df$estimate.x) & !is.na(df$estimate.y))
 df$diff <- (df$estimate.x -df$estimate.y)
 df$abs_diff <- abs(df$estimate.x -df$estimate.y)
 
+df[df$num_cov>30,]
 
 mean(df$diff, na.rm=T)
 ave_abs_diff = round(mean(df$abs_diff, na.rm=T),2)
@@ -68,5 +73,5 @@ p <-  ggplot(df, aes(x=num_cov , y=diff)) +
   #("Difference between unadjusted and adjusted\nestimates of differences in LAZ and WLZ outcomes") 
 
 
-ggsave(p, file=here("/figures/risk-factor/fig-adjusted-unadjusted-differences.png"), height=8, width=8)
+ggsave(p, file=paste0(BV_dir,"/figures/risk-factor/fig-adjusted-unadjusted-differences.png"), height=8, width=8)
 

@@ -55,8 +55,9 @@ quantile_rf <- function(A, labs=NULL, Acuts=NULL){
 
 
 #load covariates
-d<-readRDS(paste0(ghapdata_dir,"FINAL_temp_clean_covariates.rds"))
+d<-readRDS(temp_clean_covariates_path)
 d$arm<-factor(d$arm)
+table(d$hhwealth_quart)
 
 load(paste0(ghapdata_dir,"covariate creation intermediate datasets/derived covariate datasets/BF_dataset.Rdata"))
 load(paste0(ghapdata_dir,"covariate creation intermediate datasets/derived covariate datasets/rawdiar_df.Rdata"))
@@ -66,6 +67,7 @@ load(paste0(ghapdata_dir,"covariate creation intermediate datasets/derived covar
 #Strip grant identifiers from study id's
 bf$studyid<- gsub("^k.*?-" , "", bf$studyid)
 diar$studyid<- gsub("^k.*?-" , "", diar$studyid)
+dh20 <- dh20 %>% ungroup()
 dh20$studyid<- gsub("^k.*?-" , "", dh20$studyid)
 dsan$studyid<- gsub("^k.*?-" , "", dsan$studyid)
 
@@ -94,13 +96,46 @@ d <- left_join(d, dh20, by=c("studyid", "country", "subjid"))
 table(d$safeh20)
 table(d$studyid, d$safeh20)
 
-#diarrhea
-diar$subjid <- as.character(diar$subjid)
-d <- left_join(d, diar, by=c("studyid", "subjid"))
+#breastfeeding
+d <- left_join(d, bf, by=c("studyid", "country", "subjid"))
+table(d$exclfeed3)
 
+#diarrhea
+#temp change studyid so CMIN merge works
+studyid <- d$studyid
+d$studyid[grepl("CMIN", d$studyid)] <- "CMIN"
+diar$subjid <- as.character(diar$subjid)
+dim(d)
+d <- left_join(d, diar, by=c("studyid", "subjid"))
+dim(d)
+d$studyid <- studyid
 #quartile diarrhea
 summary(d$perdiar6)
 summary(d$perdiar24)
+table(d$studyid, is.na(d$perdiar24))
+
+
+#merge in TDC diarrhea and breastfeeding
+TDC <- readRDS(paste0(ghapdata_dir,"covariate creation intermediate datasets/derived covariate datasets/TDC_BF_diar.RDS")) %>%
+     rename(predfeed3_TDC=predfeed3, exclfeed3_TDC=exclfeed3, predfeed6_TDC=predfeed6,
+            exclfeed6_TDC=exclfeed6, predfeed36_TDC=predfeed36, exclfeed36_TDC=exclfeed36, 
+            predexfd6_TDC=predexfd6, perdiar6_TDC=perdiar6, perdiar24_TDC=perdiar24)
+TDC$subjid <- as.character(TDC$subjid)
+table(TDC$perdiar6_TDC)
+d <- left_join(d, TDC, by = c("studyid", "subjid"))
+table(d$perdiar6_TDC)
+
+d$predfeed3[is.na(d$predfeed3)] <- d$predfeed3_TDC[is.na(d$predfeed3)] 
+d$predfeed36[is.na(d$predfeed36)] <- d$predfeed36_TDC[is.na(d$predfeed36)] 
+d$predfeed6[is.na(d$predfeed6)] <- d$predfeed6_TDC[is.na(d$predfeed6)] 
+d$exclfeed3[is.na(d$exclfeed3)] <- d$exclfeed3_TDC[is.na(d$exclfeed3)] 
+d$exclfeed36[is.na(d$exclfeed36)] <- d$exclfeed36_TDC[is.na(d$exclfeed36)] 
+d$exclfeed6[is.na(d$exclfeed6)] <- d$exclfeed6_TDC[is.na(d$exclfeed6)] 
+d$predexfd6[is.na(d$predexfd6)] <- d$predexfd6_TDC[is.na(d$predexfd6)] 
+d$perdiar6[is.na(d$perdiar6)] <- d$perdiar6_TDC[is.na(d$perdiar6)] 
+d$perdiar24[is.na(d$perdiar24)] <- d$perdiar24_TDC[is.na(d$perdiar24)] 
+d <- d[,!grepl("_TDC",colnames(d))] 
+
 
 #Save continious version of variables for adjustment set
 d$W_perdiar6 <- d$perdiar6
@@ -110,40 +145,36 @@ summary(d$perdiar6)
 summary(d$perdiar24)
 
 #Cut diarrhea at standard points. Quartiling by overall distribution leads to sparsity
-d$perdiar6 <- as.character(cut(d$W_perdiar6, breaks=c(0, 0.05, 1), include.lowest=F, 
-                               labels = c("(0%, 5%]",">5%")))
-d$perdiar6[d$W_perdiar6==0] <-"0%"
-d$perdiar6 <- factor(d$perdiar6, levels = c("0%","(0%, 5%]",">5%"))
+
+# d$perdiar6 <- as.character(cut(d$W_perdiar6, breaks=c(0, 0.05, 1), include.lowest=F, 
+#                                labels = c("(0%, 5%]",">5%")))
+# d$perdiar6[d$W_perdiar6==0] <-"0%"
+# d$perdiar6 <- factor(d$perdiar6, levels = c("0%","(0%, 5%]",">5%"))
+# table(d$perdiar6)
+# table(paste0(d$studyid, " ", d$country), d$perdiar6)
+
+
+
+# d$perdiar24 <- as.character(cut(d$W_perdiar24, breaks=c(0, 0.05, 1), include.lowest=F, 
+#                                labels = c("(0%, 5%]",">5%")))
+# d$perdiar24[d$W_perdiar24==0] <-"0%"
+# d$perdiar24 <- factor(d$perdiar24, levels = c("0%","(0%, 5%]",">5%"))
+# table(d$perdiar24)
+# table(paste0(d$studyid, " ", d$country), d$perdiar24)
+
+d$perdiar6 <- as.character(cut(d$W_perdiar6, breaks=c(0, 0.02, 1), include.lowest=T,
+                               labels = c("[0%, 2%]",">2%")))
+d$perdiar6 <- factor(d$perdiar6, levels = c("[0%, 2%]",">2%"))
 table(d$perdiar6)
 table(paste0(d$studyid, " ", d$country), d$perdiar6)
 
-
-
-d$perdiar24 <- as.character(cut(d$W_perdiar24, breaks=c(0, 0.05, 1), include.lowest=F, 
-                               labels = c("(0%, 5%]",">5%")))
-d$perdiar24[d$W_perdiar24==0] <-"0%"
-d$perdiar24 <- factor(d$perdiar24, levels = c("0%","(0%, 5%]",">5%"))
+d$perdiar24 <- as.character(cut(d$W_perdiar24, breaks=c(0, 0.02, 1), include.lowest=T, 
+                                labels = c("[0%, 2%]",">2%")))
+d$perdiar24 <- factor(d$perdiar24, levels = c("[0%, 2%]",">2%"))
 table(d$perdiar24)
-table(paste0(d$studyid, " ", d$country), d$perdiar24)
-
-d$perdiar6_2 <- as.character(cut(d$W_perdiar6, breaks=c(0, 0.02, 1), include.lowest=F, 
-                               labels = c("(0%, 2%]",">2%")))
-d$perdiar6_2 <- factor(d$perdiar6_2, levels = c("(0%, 2%]",">2%"))
-table(d$perdiar6_2)
-table(paste0(d$studyid, " ", d$country), d$perdiar6_2)
 
 
 
-d$perdiar24_2 <- as.character(cut(d$W_perdiar24, breaks=c(0, 0.02, 1), include.lowest=F, 
-                                labels = c("(0%, 2%]",">2%")))
-d$perdiar24_2 <- factor(d$perdiar24_2, levels = c("(0%, 2%]",">2%"))
-table(d$perdiar24_2)
-table(paste0(d$studyid, " ", d$country), d$perdiar24_2)
-
-
-#breastfeeding
-d <- left_join(d, bf, by=c("studyid", "country", "subjid"))
-table(d$exclfeed3)
 
 #Convert all columns to factors exceot continious adjustment vars
 for(i in 3:ncol(d)){
@@ -153,7 +184,7 @@ for(i in 3:ncol(d)){
 }
 d$id <- as.numeric(d$id)
 
-#drop duplicated Jivita covariates
+#drop duplicated Jivita and TDC covariates
 dim(d)
 d <- distinct(d, .keep_all=T )
 dim(d)
@@ -185,8 +216,8 @@ d$predexfd6 <- relevel(d$predexfd6, ref="1")
 table(d$studyid, d$perdiar6)
 table(d$studyid, d$perdiar24)
 
-d$perdiar6 <- relevel(d$perdiar6, ref="0%")
-d$perdiar24 <- relevel(d$perdiar24, ref="0%")
+d$perdiar6 <- relevel(d$perdiar6, ref="[0%, 2%]")
+d$perdiar24 <- relevel(d$perdiar24, ref="[0%, 2%]")
 
 #Save dataset
 saveRDS(d, clean_covariates_path)

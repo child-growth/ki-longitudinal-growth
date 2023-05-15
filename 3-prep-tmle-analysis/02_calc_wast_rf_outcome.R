@@ -20,17 +20,6 @@ load(paste0(ghapdata_dir,"Wasting_inc_rf_data.RData"))
 d <- d %>% subset(., select= -c(tr))
 d_noBW <- d_noBW %>% subset(., select= -c(tr))
 
-#--------------------------------------
-# Calculate monthly mean WHZ for the
-# risk factor analysis
-#--------------------------------------
-# monthly_whz <- calc.monthly.agecat(d)
-# monthly_whz <- monthly_whz %>% subset(., select=c(subjid,studyid,country,agecat,region, measurefreq, whz))
-# monthly_whz <- monthly_whz %>%
-#   filter(!is.na(agecat)) %>%
-#   group_by(studyid,country,subjid,agecat,measurefreq) %>%
-#   summarise(whz=mean(whz))
-# save(monthly_whz, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/monthly_whz.rdata")
 
 #--------------------------------------
 # Calculate prevalence of
@@ -57,7 +46,7 @@ prev = dmn %>%
 
 # save mean Z scores at each age
 meanWHZ = dmn %>% 
-  filter(agecat=="Birth" | agecat=="6 months" | agecat=="24 months") %>%
+  filter(agecat=="Birth" | agecat=="6 months" | agecat=="18 months" | agecat=="24 months") %>%
   select(studyid,subjid,country,agecat,
          whz)
 
@@ -130,7 +119,7 @@ wast_ci_0_24_no_birth = d6_nobirth %>% ungroup() %>%
   mutate(N=n()) %>%
   ungroup()
 
-cuminc_nobirth <- rbind(wast_ci_0_6_no_birth, wast_ci_0_24_no_birth)
+cuminc_nobirth <- rbind(wast_ci_0_6_no_birth, wast_ci_0_24_no_birth, wast_ci_6_24)
 
 
 table(cuminc$ever_wasted[cuminc$agecat=="0-6 months"])
@@ -149,7 +138,8 @@ pers_wast_0_6 <- d6 %>%
   group_by(studyid,country,subjid) %>%
   arrange(studyid,country,subjid, agedays) %>% 
   mutate(N=n()) %>% filter(N>=4) %>%
-  mutate(perc_wasting=mean(whz < (-2))) %>% slice(1) %>%
+  mutate(perc_wasting=mean(whz < (-2)), mean_age_gap=mean(agedays-lag(agedays),na.rm=T)) %>% 
+  slice(1) %>%
   mutate(pers_wast = 1*(perc_wasting >= 0.5)) %>%
   mutate(agecat="0-6 months") %>% ungroup() 
 
@@ -161,7 +151,8 @@ pers_wast_0_24 <- d6 %>%
   group_by(studyid,country,subjid) %>%
   arrange(studyid,country,subjid, agedays) %>% 
   mutate(N=n()) %>% filter(N>=4) %>%
-  mutate(perc_wasting=mean(whz < (-2))) %>% slice(1) %>%
+  mutate(perc_wasting=mean(whz < (-2)), mean_age_gap=mean(agedays-lag(agedays),na.rm=T)) %>%
+  slice(1) %>%
   mutate(pers_wast = 1*(perc_wasting >= 0.5)) %>%
   mutate(agecat="0-24 months") %>% ungroup() 
 
@@ -170,7 +161,8 @@ pers_wast_6_24 <- d6 %>%
   group_by(studyid,country,subjid) %>%
   arrange(studyid,country,subjid, agedays) %>% 
   mutate(N=n()) %>% filter(N>=4) %>%
-  mutate(perc_wasting=mean(whz < (-2))) %>% slice(1) %>%
+  mutate(perc_wasting=mean(whz < (-2)), mean_age_gap=mean(agedays-lag(agedays),na.rm=T)) %>%
+  slice(1) %>%
   mutate(pers_wast = 1*(perc_wasting >= 0.5)) %>%
   mutate(agecat="6-24 months") %>% ungroup() 
 
@@ -181,6 +173,14 @@ table(pers_wast_0_24$pers_wast)
 mean(pers_wast_0_6$pers_wast)
 mean(pers_wast_6_24$pers_wast)
 mean(pers_wast_0_24$pers_wast)
+
+mean(pers_wast_0_6$mean_age_gap)
+mean(pers_wast_6_24$mean_age_gap)
+mean(pers_wast_0_24$mean_age_gap)
+
+summary(pers_wast_0_6$mean_age_gap)
+summary(pers_wast_6_24$mean_age_gap)
+summary(pers_wast_0_24$mean_age_gap)
 
 summary(pers_wast_0_6$perc_wasting)
 summary(pers_wast_6_24$perc_wasting)
@@ -221,12 +221,12 @@ rec <- bind_rows(wast_rec_0_6, wast_rec_6_24, wast_rec_0_24)
 #--------------------------------------
 
 
-save(prev, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/wast_prev.RData")
-save(meanWHZ, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/wast_meanZ_outcomes.RData")
-save(cuminc, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/wast_cuminc.rdata")
-save(cuminc_nobirth, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/wast_cuminc_nobirth.rdata")
-save(pers_wast, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/pers_wast.rdata")
-save(rec, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/wast_rec.rdata")
+save(prev, file=paste0(ghapdata_dir,"wast_prev.RData"))
+save(meanWHZ, file=paste0(ghapdata_dir,"wast_meanZ_outcomes.RData"))
+save(cuminc, file=paste0(ghapdata_dir,"wast_cuminc.rdata"))
+save(cuminc_nobirth, file=paste0(ghapdata_dir,"wast_cuminc_nobirth.rdata"))
+save(pers_wast, file=paste0(ghapdata_dir,"pers_wast.rdata"))
+save(rec, file=paste0(ghapdata_dir,"wast_rec.rdata"))
 
 
 

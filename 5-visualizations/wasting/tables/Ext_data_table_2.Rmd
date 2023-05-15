@@ -1,0 +1,50 @@
+---
+title: ""
+output: 
+  word_document:
+    reference_docx: word_styles.docx
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r, include=F}
+
+library(tidyverse)
+library(officedown)
+library(knitr)
+library(here)
+library(officer)
+library(flextable)
+
+tab <- readRDS(file=paste0(here::here(),"/data/enrol_tab_wast.RDS"))
+
+FitFlextableToPage <- function(ft, pgwidth = 6){
+
+  ft_out <- ft %>% autofit()
+
+  ft_out <- width(ft_out, width = dim(ft_out)$widths*pgwidth /(flextable_dim(ft_out)$widths))
+  return(ft_out)
+}
+
+
+tab_f1 <- FitFlextableToPage(flextable(tab[,c(1:11)]), pgwidth = 11)
+tab_f2 <- FitFlextableToPage(flextable(tab[,c(1,12:22)]), pgwidth = 11)
+
+```
+
+
+```{r, echo=F}
+tab_f1
+
+```
+
+#Part 2
+
+```{r, echo=F}
+
+tab_f2
+```

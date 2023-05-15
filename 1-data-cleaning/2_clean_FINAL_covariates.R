@@ -20,6 +20,7 @@ library(growthstandards)
 d <- readRDS(included_studies_path)
 
 
+
 #--------------------------------------------------------
 # Calculate longitudinal prevalence of wasting and stunting
 # in the first 6 months.
@@ -38,6 +39,7 @@ head(lprev)
 table(lprev$anywast06)
 table(lprev$anystunt06)
 table(lprev$pers_wast)
+table(lprev$studyid, lprev$pers_wast)
 
 #Merge in new variables
 lprev <- lprev %>% subset(., select = c(studyid, country,subjid, anywast06,  pers_wast))
@@ -68,17 +70,21 @@ table(d$month)
 #Calculate stunting and wasting at enrollment and keep one observation per child
 #Also check if children without a recorded birthweight or birthlength have WAZ or HAZ in the first year of life
 #--------------------------------------------------------
-d <- d %>% group_by(studyid, subjid) %>% 
+d <- d %>% group_by(studyid, country, subjid) %>% 
   arrange(studyid, subjid, agedays) %>% 
-  filter(!is.na(haz)) %>%
-  mutate(enstunt= as.numeric(haz < -2),
-         enwast= as.numeric(whz < -2),
+  mutate(enstunt= as.numeric(ifelse(length(first(haz[complete.cases(haz)]))==0,NA,first(haz[complete.cases(haz)])) < -2),
+         enwast= as.numeric(ifelse(length(first(whz[complete.cases(whz)]))==0,NA,first(whz[complete.cases(whz)])) < -2),
          birthLAZ= haz,
          birthWAZ= waz) %>%
   #keep one observation per child
   slice(1) 
 
 table(is.na(d$birthwt), d$agedays > 7)
+
+#df <- d %>% filter(studyid=="MAL-ED")
+# df <- d %>% filter(studyid == "Burkina Faso Zn", country == "BURKINA FASO", subjid == 117101)
+# ifelse(length(first(df$haz[complete.cases(df$haz)]))==0,NA,first(df$haz[complete.cases(df$haz)]))
+
 
 #keep where anthro is measured on first 7 days, but birth anthro is not recorded
 d$birthLAZ[d$agedays>7] <- NA 
@@ -89,8 +95,8 @@ d$birthmeas_age[d$agedays <= 7] <- d$agedays[d$agedays <= 7]
 #Drop anthropometry measures (seperate long-form dataset used to calculate anthropometry outcomes)
 d <- d %>% subset(., select=-c(agedays, haz, waz, whz)) 
 
-table(d$studyid, d$enwast)
-table(d$studyid, d$enstunt)
+table(paste0(d$studyid,"-",d$country), d$enwast)
+table(paste0(d$studyid,"-",d$country), d$enstunt)
 
 
 
@@ -137,8 +143,11 @@ table(pca$studyid, pca$hhwealth_quart)
 #Merge into main dataframe
 pca <- as.data.frame(pca)
 pca$subjid <-as.character(pca$subjid)
-d <- left_join(d, pca, by=c("studyid", "country", "subjid"))
 
+dim(pca)
+dim(d)
+d <- left_join(d, pca, by=c("studyid", "country", "subjid"))
+dim(d)
 #Note, only the COHORTS study has SES categories from a PCA, but no/incomplete indicators to calculate PCA from
 #Clean and merge that data here:
 #merge in ses variable for COHORTS for all countries except INDIA. The other countries have wealth based on 
@@ -157,11 +166,15 @@ d$hhwealth_quart <- factor(d$hhwealth_quart)
 
 #Check and make sure all merged correctly
 df <- d %>% filter(!is.na(hhwealth_quart)) %>% group_by(studyid, subjid) %>% slice(1)
-table(pca$studyid, pca$hhwealth_quart)
+pca_unique <- pca %>% filter(!is.na(hhwealth_quart)) %>% group_by(studyid, subjid) %>% slice(1)
+table(pca_unique$studyid, pca_unique$hhwealth_quart)
 table(df$studyid, df$hhwealth_quart)
 
-
-
+#remove space for longbow
+d$hhwealth_quart <- as.character(d$hhwealth_quart)
+d$hhwealth_quart <- gsub(" ", "", d$hhwealth_quart)
+d$hhwealth_quart <- factor(d$hhwealth_quart, levels=c("WealthQ4","WealthQ3","WealthQ2","WealthQ1"))
+table(d$hhwealth_quart)
 
 #--------------------------------------------------------------------------
 # Code Food security
@@ -215,6 +228,8 @@ d$gagebrth[d$studyid=="SAS-CompFeed"] <- NA
 d$gagebrth[d$studyid=="EE"] <- NA
 
 
+
+
 #parity
 #Combine parity and birthorder to have sufficient data to analyze
 #Parity (which includes stillborns past a certain gestational age) is assumed
@@ -223,6 +238,7 @@ table(d$studyid[!is.na(d$parity)], d$parity[!is.na(d$parity)])
 table(d$studyid[!is.na(d$brthordr)], d$brthordr[!is.na(d$brthordr)])
 
 d$parity[is.na(d$parity)] <- d$brthordr[is.na(d$parity)]
+d$parity[is.na(d$parity)] <- d$gravida[is.na(d$parity)]
 
 
 #Shift obs in SAS-FoodSuppl to make 1==firstborn
@@ -242,10 +258,13 @@ table(d$studyid, is.na(d$birthwt))
 
 #sex must be "Male" or "Female" for growthstandards package
 table(d$sex)
+d$sex[!(d$sex %in% c("Male","Female"))] <- NA
 table(is.na(d$sex))
+#Drop children with missing sex
+d <- d %>% filter(!is.na(sex))
 
 #Use agedays-1 as function codes birth age=0
-d$birthlen2 <- who_zscore2htcm(d$birthmeas_age-1, d$birthLAZ, sex = d$sex)
+d$birthlen2 <- who_zscore2value(d$birthmeas_age-1, d$birthLAZ, y_var = "lenhtcm" , x_var = "agedays", sex = d$sex)
 d$birthwt2 <- who_zscore2wtkg(d$birthmeas_age-1, d$birthWAZ, sex = d$sex) * 1000
 d$birthlen2[!is.finite(d$birthlen2)] <- NA
 d$birthwt2[!is.finite(d$birthwt2)] <- NA
@@ -273,6 +292,18 @@ table(d$studyid, is.na(d$birthwt))
 #fix 8 observations in CMC cohort with missing birthweight that still have missingess code (9998) rather than NA
 table(df$birthwt==9998)
 df$birthwt[df$birthwt==9998] <- NA
+
+
+#calculate SGA
+sga <- igb_value2zscore(gagebrth=d$gagebrth, val=d$birthwt/1000, var = "wtkg", sex = d$sex)
+d$W_sga <- sga
+d$W_sga[is.na(sga)] <- NA
+d$W_sga[is.infinite(sga)] <- NA
+d$sga <- ifelse(sga < (-1.282),"SGA","Not SGA")
+d$sga[is.na(sga)] <- NA
+d$sga[is.infinite(sga)] <- NA
+table(d$sga)
+
 #--------------------------------------------------------------------------
 # parental characteristics
 #--------------------------------------------------------------------------
@@ -356,19 +387,19 @@ d$id[d$studyid %in% c("iLiNS-Zinc",
                       "JiVitA-4",
                       "PROBIT",
                       "SAS-CompFeed")] <-d$clustid[d$studyid %in% c("iLiNS-Zinc",
-                                                                               "JiVitA-3",    
-                                                                               "JiVitA-4",
-                                                                               "PROBIT",
-                                                                               "SAS-CompFeed")]
+                                                                    "JiVitA-3",    
+                                                                    "JiVitA-4",
+                                                                    "PROBIT",
+                                                                    "SAS-CompFeed")]
 d$id[!(d$studyid %in% c("iLiNS-Zinc",
                         "JiVitA-3",    
                         "JiVitA-4",
                         "PROBIT",
                         "SAS-CompFeed"))] <-d$subjid[!(d$studyid %in% c("iLiNS-Zinc",
-                                                                                   "JiVitA-3",    
-                                                                                   "JiVitA-4",
-                                                                                   "PROBIT",
-                                                                                   "SAS-CompFeed"))]
+                                                                        "JiVitA-3",    
+                                                                        "JiVitA-4",
+                                                                        "PROBIT",
+                                                                        "SAS-CompFeed"))]
 
 #use siteid from PROBIT
 d$id[d$studyid %in% c("PROBIT")] <-d$siteid[d$studyid %in% c("PROBIT")]
@@ -477,9 +508,16 @@ d$tr[d$studyid=="JiVitA-4" & d$arm=="Plumpy Doz"] <- "LNS"
 #--------------------------------------------------------
 
 colnames(d)
-d <- subset(d, select = -c(brthweek,   brthordr, 
-                           ses, birthlen2, birthwt2, 
-                           birthmeas_age, birthLAZ, birthWAZ))
+
+d <- subset(d, select = c(studyid,       subjid,        sex,           month,  country,       region,         arm,           tr,            gagebrth,     
+                          brthmon,       parity,       
+                          birthwt,       birthlen,   sga, W_sga,  vagbrth,      
+                          hdlvry,        mage,          mhtcm,        
+                          mwtkg,         mbmi,          meducyrs,      single,        fage,          fhtcm,         feducyrs,     
+                          trth2o,        cleanck,       impfloor,      nrooms,        nhh,           nchldlt5,      ses,          
+                          earlybf,       hfoodsec,   measurefreq,   anywast06,    
+                          pers_wast,     enstunt,       enwast,     hhwealth_quart,      id))
+
 
 #--------------------------------------------------------
 # Convert continious variables to quartiled categorical 
@@ -546,17 +584,17 @@ quantile_rf <- function(data, A, labs=NULL, Acuts=NULL, units=NULL){
 
 
 #A-priori categorical levels
-  #gestational age at birth
-  #<37 weeks = preterm
-  #37-38 weeks = early term
-  #39-40 weeks = full term (baseline)
-  #>=41 weeks = late/post term
+#gestational age at birth
+#<37 weeks = preterm
+#37-38 weeks = early term
+#39-40 weeks = full term (baseline)
+#>=41 weeks = late/post term
 
-  #maternal BMI
-  #<18.5 = underweight
-  #>=18.5 and <25 = normal weight (baseline)
-  #>=25 and <30 = overweight
-  #>=30 = obese
+#maternal BMI
+#<18.5 = underweight
+#>=18.5 and <25 = normal weight (baseline)
+#>=25 and <30 = overweight
+#>=30 = obese
 
 
 #Save continious variables as seperate variables to use as adjustment covariates
@@ -590,13 +628,31 @@ d$birthlen <- quantile_rf(d, d$W_birthlen, Acuts=c(0,48, 50, max(d$W_birthlen, n
 d$W_mage[d$studyid=="Burkina Faso Zn" & d$W_mage==20] <- 18
 d$mage <- quantile_rf(d, d$W_mage, Acuts=c(0,20,30,max(d$W_mage, na.rm=T)))
 
-d$mhtcm <- quantile_rf(d, d$W_mhtcm, Acuts=c(0,151,155,max(d$W_mhtcm, na.rm=T)), units="cm")
-d$mwtkg <- quantile_rf(d, d$W_mwtkg, Acuts=c(0,52,58,max(d$W_mwtkg, na.rm=T)), units="kg")
-d$mbmi <- quantile_rf(d, d$W_mbmi, Acuts=c(0,18.5,max(d$W_mbmi, na.rm=T)), labs=c("Underweight", "Normal weight"))
-d$fage <- quantile_rf(d, d$W_fage, Acuts=c(0,32,38,max(d$W_fage, na.rm=T)))
-d$fhtcm <- quantile_rf(d, d$W_fhtcm, Acuts=c(0,162,167,max(d$W_fhtcm, na.rm=T)), units="cm")
+# d$mhtcm <- quantile_rf(d, d$W_mhtcm, Acuts=c(0,151,155,max(d$W_mhtcm, na.rm=T)), units="cm")
+# d$mbmi <- quantile_rf(d, d$W_mbmi, Acuts=c(0,18.5,max(d$W_mbmi, na.rm=T)), labs=c("Underweight", "Normal weight"))
+d$mhtcm <- quantile_rf(d, d$W_mhtcm, Acuts=c(0,150,max(d$W_mhtcm, na.rm=T)), units="cm")
+d$mbmi <- quantile_rf(d, d$W_mbmi, Acuts=c(0,20,max(d$W_mbmi, na.rm=T)), units="kg/m²")
 
- 
+d$mwtkg <- quantile_rf(d, d$W_mwtkg, Acuts=c(0,45,max(d$W_mwtkg, na.rm=T)), units="kg")
+
+#Make 3-level categories for figures 3a and 3b
+d$mhtcm3 <- quantile_rf(d, d$W_mhtcm, Acuts=c(0,150, 155,max(d$W_mhtcm, na.rm=T)), units="cm")
+d$mbmi3 <- quantile_rf(d, d$W_mbmi, Acuts=c(0,20, 24, max(d$W_mbmi, na.rm=T)), units="kg/m²")
+
+# d$mhtcm2 <- quantile_rf(d, d$W_mhtcm, Acuts=c(0,145,max(d$W_mhtcm, na.rm=T)), units="cm")
+# d$mwtkg2 <- quantile_rf(d, d$W_mwtkg, Acuts=c(0,45,max(d$W_mwtkg, na.rm=T)), units="kg")
+# d$mbmi2 <- quantile_rf(d, d$W_mbmi, Acuts=c(0,18.5,24,max(d$W_mbmi, na.rm=T)), labs=c("Underweight", "Normal weight", "Overweight"))
+# 
+# round(prop.table(table(d$mhtcm))*100,2)
+# round(prop.table(table(d$mhtcm2))*100,2)
+# round(prop.table(table(d$mbmi2))*100,2)
+# round(prop.table(table(d$mwtkg2))*100,2)
+# 
+
+#d$fhtcm <- quantile_rf(d, d$W_fhtcm, Acuts=c(0,162,167,max(d$W_fhtcm, na.rm=T)), units="cm")
+d$fhtcm <- quantile_rf(d, d$W_fhtcm, Acuts=c(0,162,max(d$W_fhtcm, na.rm=T)), units="cm") #Change to just use stunted fathers as the cutoff
+
+d$fage <- quantile_rf(d, d$W_fage, Acuts=c(0,30,35,max(d$W_fage, na.rm=T)))
 
 
 #Make education categorizing function that handles the irregular distribution across studies.
@@ -659,17 +715,19 @@ quantile_rf_edu <- function(d, Avar="meducyrs", to.character=F){
   }
   dfull <-as.data.frame(dfull)
   if(to.character){
-  dfull[,Avar] <- as.character(dfull[,Avar])
+    dfull[,Avar] <- as.character(dfull[,Avar])
   }
   print(class(dfull[,Avar]))
   return(dfull)
 }
 
+d$meducyrs <- as.numeric(as.character(d$meducyrs))
 d <- d %>% group_by(studyid, country) %>%
-  do(quantile_rf_edu(., Avar="meducyrs"))
+  do(quantile_rf_edu(., Avar="meducyrs", to.character=T))
 #d <- d %>% arrange(feducyrs, studyid, country, subjid)
 d <- d %>% group_by(studyid, country) %>%
   do(quantile_rf_edu(., Avar="feducyrs", to.character=T))
+d$meducyrs <- factor(d$meducyrs, levels = c("Low","Medium","High"))
 d$feducyrs <- factor(d$feducyrs, levels = c("Low","Medium","High"))
 
 table(d$meducyrs)
@@ -748,6 +806,10 @@ d$parity <- relevel(d$parity, ref="1")
 d$birthwt <- relevel(d$birthwt, ref="Normal or high birthweight")
 
 
+#SGA
+d$sga <- relevel(factor(d$sga), ref="Not SGA")
+
+
 #birth length: 
 #No WHO categories:
 #Based on quantiles
@@ -757,7 +819,7 @@ d$birthlen <- relevel(d$birthlen, ref=">=50 cm")
 #wealth index: 
 #wealthiest quartile - Q4 is baseline
 table(paste0(d$studyid," ", d$country), d$hhwealth_quart)
-d$hhwealth_quart <- relevel(d$hhwealth_quart, ref="Wealth Q4")
+d$hhwealth_quart <- relevel(d$hhwealth_quart, ref="WealthQ4")
 
 # children < 5 in HH
 #not sure how this could be zero - can you double check this? 
@@ -773,13 +835,14 @@ d$nchldlt5 <- relevel(d$nchldlt5, ref="1")
 
 d$gagebrth <- relevel(d$gagebrth, ref="Full or late term")
 
-#maternal BMI (is this measured when pregnant or not? if pregnant, then we may need to change these categories)
+#maternal BMI 
 #<18.5 = underweight
 #>=18.5 and <25 = normal weight (baseline)
 #>=25 and <30 = overweight
 #>=30 = obese
 
-d$mbmi <- relevel(d$mbmi, ref="Normal weight")
+#d$mbmi <- relevel(d$mbmi, ref="Normal weight")
+d$mbmi <- relevel(d$mbmi, ref=">=20 kg/m²")
 
 #maternal height (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3095774/)
 #less than 145 cm
@@ -788,10 +851,12 @@ d$mbmi <- relevel(d$mbmi, ref="Normal weight")
 #155-159.9 cm
 #160.0 cm or greater. (baseline)
 
-d$mhtcm <- relevel(d$mhtcm, ref=">=155 cm")
+#d$mhtcm <- relevel(d$mhtcm, ref=">=155 cm")
+d$mhtcm <- relevel(d$mhtcm, ref=">=150 cm")
 
-#maternal weight?
-d$mwtkg <- relevel(d$mwtkg, ref=">=58 kg")
+#maternal weight
+#d$mwtkg <- relevel(d$mwtkg, ref=">=58 kg")
+d$mwtkg <- relevel(d$mwtkg, ref=">=45 kg")
 
 #mother's/father's education
 #lowest education level = baseline
@@ -804,10 +869,12 @@ d$mage <- relevel(d$mage, ref="[20-30)")
 
 #father age
 #oldest = baseline
-d$fage <- relevel(d$fage, ref=">=38")
+#d$fage <- relevel(d$fage, ref=">=38")
+d$fage <- relevel(d$fage, ref=">=35")
 
 #father height
-d$fhtcm <- relevel(d$fhtcm, ref=">=167 cm")
+#d$fhtcm <- relevel(d$fhtcm, ref=">=167 cm")
+d$fhtcm <- relevel(d$fhtcm, ref=">=162 cm")
 
 #parental education
 d$meducyrs <- relevel(d$meducyrs, ref="High")
@@ -822,7 +889,7 @@ d$nrooms <- relevel(d$nrooms, ref="4+")
 d$brthmon <- factor(d$brthmon)
 d$month <- factor(d$month)
 d$single <- factor(d$single)
-d$vagbrth <- factor(d$vagbrth)
+#d$vagbrth <- factor(d$vagbrth)
 d$hdlvry <- factor(d$hdlvry)
 d$hfoodsec <- factor(d$hfoodsec)
 d$enstunt <- factor(d$enstunt)
@@ -850,30 +917,27 @@ for(i in 1:ncol(d)){
 # Check for sparsity across RF levels
 #--------------------------------------------
 
-tabRF <- function(d, Avar){
-  tab <- table(paste0(d$studyid, " ",d$country), d[,Avar])
-  tab <- tab[rowSums(tab)!=0, ]
-  print(tab)
-}
-
-
-
-
-
-tabRF(d, "gagebrth")
-tabRF(d, "birthwt")
-tabRF(d, "birthlen")
-tabRF(d, "parity") 
-tabRF(d, "mage")
-tabRF(d, "mhtcm") 
-tabRF(d, "mwtkg") 
-tabRF(d, "mbmi") 
-tabRF(d, "fage")
-tabRF(d, "fhtcm")
-tabRF(d, "feducyrs")
-tabRF(d, "nrooms")
-tabRF(d, "nhh")
-tabRF(d, "nchldlt5")
+# tabRF <- function(d, Avar){
+#   tab <- table(paste0(d$studyid, " ",d$country), d[,Avar])
+#   tab <- tab[rowSums(tab)!=0, ]
+#   print(tab)
+# }
+# 
+# 
+# tabRF(d, "gagebrth")
+# tabRF(d, "birthwt")
+# tabRF(d, "birthlen")
+# tabRF(d, "parity") 
+# tabRF(d, "mage")
+# tabRF(d, "mhtcm") 
+# tabRF(d, "mwtkg") 
+# tabRF(d, "mbmi") 
+# tabRF(d, "fage")
+# tabRF(d, "fhtcm")
+# tabRF(d, "feducyrs")
+# tabRF(d, "nrooms")
+# tabRF(d, "nhh")
+# tabRF(d, "nchldlt5")
 
 
 

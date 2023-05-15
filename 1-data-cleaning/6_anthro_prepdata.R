@@ -1,9 +1,4 @@
 
-#-----------------------------------
-# Stunting analysis
-# Objective 1a
-# Import data, subset to relevant variables
-#-----------------------------------
 rm(list=ls())
 source(paste0(here::here(), "/0-config.R"))
 
@@ -17,7 +12,7 @@ drop_int_arms <- function(d){
   d=d[-which(d$studyid=="PROBIT" & d$tr!="Control"),]
   d=d[-which(d$studyid=="iLiNS-Zinc" & d$tr!="Control"),]
   d=d[-which(d$studyid=="SAS-CompFeed" & d$tr!="Control"),]
-  d=d[-which(d$studyid=="COHORTS" & d$tr=="Other"),]
+  #d=d[-which(d$studyid=="COHORTS" & d$tr=="Other"),] #no longer included because < 1990
   return(d)
 }
 
@@ -28,14 +23,29 @@ drop_int_arms <- function(d){
 
 d <- readRDS(paste0(ghapdata_dir, "ki-manuscript-dataset.rds"))
 dim(d)
+colnames(d)
+
+unique(d$studyid)
+unique(d$studyid[d$measurefreq!="yearly"])
+unique(d$studyid[d$measurefreq=="monthly"])
+
+
+unique(paste0(d$studyid,"-",d$country))
 length(unique(paste0(d$studyid,d$country,d$subjid)))
 
+#Get percent of incalculable WLZ with length <25
+df <- d %>% filter(lencm < 45, agedays <= 31)
+table(df$agedays)
+nrow(df)/nrow(d) * 100
+df <- df %>% filter(waz >= -6 & waz <=5)
+summary(df$waz)
 
 #--------------------------------------------
 # Subset to  just identifying and anthro data
 #--------------------------------------------
 
-d <- d %>% subset(., select=c(studyid, subjid, country, region, measurefreq, tr, sex, agedays, haz, whz, waz, muaz, latitude, longitud))
+d <- d %>% subset(., select=c(studyid, subjid, country, region, brthyr, gdp,gdi,gii,chi,gini,he,pov, mort,
+                              measurefreq, tr, sex, agedays, haz, whz, waz, muaz, latitude, longitud))
 
 #Check for duplicate agedays
 dup_age <- d %>% group_by(studyid, subjid, agedays) %>%
@@ -50,6 +60,29 @@ table(d$studyid)
 table(d$studyid,d$country)
 
 
+
+
+#C+C manuscript children dropped for outlier exclusions
+df <- d %>% filter(!is.na(haz)|!is.na(whz)|!is.na(waz))
+nchild_cc <- nrow(df %>% filter(measurefreq!="yearly" & agedays < 24*30.4167) %>% distinct(studyid, subjid))
+no_outliers_df <- df %>% filter(haz >= -6 & haz <=6, 
+                               whz >= -5 & whz <=5,
+                               waz >= -6 & waz <=5) %>%
+                        mutate(id=paste0(studyid, "_",subjid))
+outliers_df <- df %>% filter( !(haz >= -6 & haz <=6 &
+                               whz >= -5 & whz <=5 &
+                               waz >= -6 & waz <=5)) %>%
+                        mutate(id=paste0(studyid, "_",subjid))
+outliers_df <- outliers_df[!(outliers_df$id %in% no_outliers_df$id),]
+nrow(outliers_df %>% distinct(id))
+outliers_df<- outliers_df %>% group_by(id) %>% summarise(N=n()) 
+prop.table(table(outliers_df$N))
+outliers_df %>%  ungroup() %>% summarise(mean(N), median(N))
+
+
+dropped <- nchild_cc - nrow(no_outliers_df %>% filter(measurefreq!="yearly" & agedays < 24*30.4167) %>% distinct(studyid, subjid))
+dropped
+dropped/nchild_cc * 100
 
 #--------------------------------------------
 # order data, create measurement id, and 
@@ -66,22 +99,25 @@ stunt_mort <- d %>% filter(haz >= -6 & haz <=6, !is.na(haz)) %>%
   group_by(studyid,subjid) %>%
   arrange(studyid,subjid,agedays) %>%
   mutate(measid=seq_along(subjid)) 
+
 #Observations dropped
 nobs - nrow(stunt_mort)
 
 
 #C+C manuscript dropped
-dropped <- nobsq_cc - nrow(stunt_mort %>% ungroup())
+dropped <- nobsq_cc - nrow(stunt_mort %>% filter(measurefreq!="yearly" & agedays < 24*30.4167, !is.na(haz)) %>% ungroup())
 dropped
 dropped/nobsq_cc * 100 #percentage dropped
-
 
 #Stunting manuscript dropped
 dropped <- nobsq - nrow(stunt_mort %>% ungroup() %>% filter(measurefreq!="yearly" & agedays < 24*30.4167) %>% do(drop_int_arms(.)))
 dropped
 dropped/nobsq * 100 #percentage dropped
 
-
+#Wasting manuscript dropped
+droppedm <- nobsm - nrow(stunt_mort %>% filter(measurefreq=="monthly" & agedays < 24*30.4167, !is.na(haz)))
+droppedm
+droppedm/nobsm * 100 #percentage dropped monthly
 
 
 nobsq <- nrow(d %>% filter(measurefreq!="yearly" & agedays < 24*30.4167, !is.na(whz)))
@@ -119,6 +155,8 @@ droppedm/nobsm * 100 #percentage dropped monthly
 
 nobsq <- nrow(d %>% filter(measurefreq!="yearly" & agedays < 24*30.4167, !is.na(haz), !is.na(whz)))
 
+
+#double check calculations above
 co_mort <- d %>% filter(haz >= -6 & haz <=6 & whz >= -5 & whz <=5) %>%
   arrange(studyid,subjid,agedays) %>%
   group_by(studyid,subjid) %>%
@@ -163,16 +201,42 @@ saveRDS(co_rf, rf_co_occurrence_path)
 Ndf <- rbind(stunt_rf, wast_rf, waz_rf) %>% filter(agedays < 24 * 30.4167)
 length(unique(paste0(Ndf$studyid, Ndf$country))) #cohorts
 length(unique(Ndf$country)) #Countries
-length(unique(paste0(Ndf$studyid, Ndf$subjid))) #Children
-length(unique(paste0(Ndf$studyid, Ndf$subjid, Ndf$agedays))) #Observations
+length(unique(paste0(Ndf$studyid, "_", Ndf$subjid))) #Children
+length(unique(paste0(Ndf$studyid, "_",Ndf$subjid, "_", Ndf$agedays))) #Observations
 
 
 #Get N's for mortality studies
 mort_Ndf <- rbind(stunt_mort, wast_mort, waz_mort) %>% filter(measurefreq=="yearly", agedays < 24 * 30.4167)
 length(unique(paste0(mort_Ndf$studyid, mort_Ndf$country))) #cohorts
 length(unique(mort_Ndf$country)) #Countries
-length(unique(paste0(mort_Ndf$studyid, mort_Ndf$subjid))) #Children
-length(unique(paste0(mort_Ndf$studyid, mort_Ndf$subjid, mort_Ndf$agedays))) #Observations
+length(unique(paste0(mort_Ndf$studyid, "_", mort_Ndf$subjid))) #Children
+length(unique(paste0(mort_Ndf$studyid, "_", mort_Ndf$subjid, "_", mort_Ndf$agedays))) #Observations
+
+mort_Ndf <- rbind(stunt_mort, wast_mort, waz_mort) %>% filter(agedays < 24 * 30.4167)
+length(unique(paste0(mort_Ndf$studyid, mort_Ndf$country))) #cohorts
+length(unique(mort_Ndf$country)) #Countries
+length(unique(paste0(mort_Ndf$studyid, "_", mort_Ndf$subjid))) #Children
+length(unique(paste0(mort_Ndf$studyid, "_", mort_Ndf$subjid, "_", mort_Ndf$agedays))) #Observations
+
+mort_Ndf2 <- mort_Ndf %>% distinct(studyid, subjid, agedays)
+length(unique(paste0(mort_Ndf2$studyid,"_", mort_Ndf2$subjid,"_", mort_Ndf2$agedays))) #Observations
+
+
+#double check calculations above
+cc_tab1 <- d %>% ungroup() %>% filter(agedays < 24 * 30.4167) %>%
+  filter(!is.na(whz) | !is.na(waz) | !is.na(haz)) %>% 
+  filter(abs(whz) <= 5 | abs(haz) <= 6 | (waz >= (-6) & waz <= 5)) %>% 
+  distinct(studyid, subjid, agedays) %>%
+  summarize(nobs=n(), nchild=length(unique(paste0(studyid, "_",subjid))))
+cc_tab1
+
+#children under 6
+cc_tab_u6 <- d %>% ungroup() %>% filter(agedays < 6 * 30.4167) %>%
+  filter(!is.na(whz) | !is.na(waz) | !is.na(haz)) %>% 
+  filter(abs(whz) <= 5 | abs(haz) <= 6 | (waz >= (-6) & waz <= 5)) %>% 
+  distinct(studyid, subjid, agedays) %>%
+  summarize(nobs=n(), nchild=length(unique(paste0(studyid, "_",subjid))))
+cc_tab_u6
 
 #--------------------------------------------
 # Subset to and save descriptive epi data
@@ -190,7 +254,6 @@ d %>% filter(tr!="", !is.na(haz)) %>% group_by(studyid, country, tr) %>%
   as.data.frame()
 
 
-
 stunt <- drop_int_arms(stunt_rf) 
 wast <- drop_int_arms(wast_rf) 
 waz <- drop_int_arms(waz_rf) 
@@ -200,6 +263,12 @@ stunt <- droplevels(stunt)
 wast <- droplevels(wast)
 waz <- droplevels(waz)
 co <- droplevels(co)
+
+#Drop i-Lins Zinc as the control arm does not have quarterly measures
+stunt <- stunt %>% filter(studyid!="iLiNS-Zinc")
+wast <- wast %>% filter(studyid!="iLiNS-Zinc")
+waz <- waz %>% filter(studyid!="iLiNS-Zinc")
+co <- co %>% filter(studyid!="iLiNS-Zinc")
 
 saveRDS(stunt, stunting_data_path)
 saveRDS(wast, wasting_data_path)
@@ -213,15 +282,15 @@ saveRDS(co, co_occurrence_data_path)
 Ndf <- stunt %>% filter(agedays < 24 * 30.4167)
 length(unique(paste0(Ndf$studyid, Ndf$country))) #cohorts
 length(unique(Ndf$country)) #Countries
-length(unique(paste0(Ndf$studyid, Ndf$subjid))) #Children
-length(unique(paste0(Ndf$studyid, Ndf$subjid, Ndf$agedays))) #Observations
+length(unique(paste0(Ndf$studyid,"_", Ndf$subjid))) #Children
+length(unique(paste0(Ndf$studyid, "_",Ndf$subjid, "_",Ndf$agedays))) #Observations
 nrow(Ndf) #Observations
 
 #Monthly N's
 Ndf <- stunt %>% filter(agedays < 24 * 30.4167, measurefreq=="monthly")
 length(unique(paste0(Ndf$studyid, Ndf$country))) #cohorts
 length(unique(Ndf$country)) #Countries
-length(unique(paste0(Ndf$studyid, Ndf$subjid))) #Children
+length(unique(paste0(Ndf$studyid, "_", Ndf$subjid))) #Children
 nrow(Ndf) #Observations
 
 
@@ -231,16 +300,6 @@ nrow(Ndf) #Observations
 Ndf <- rbind(stunt, wast, waz) %>% filter(agedays < 24 * 30.4167, measurefreq=="monthly")
 length(unique(paste0(Ndf$studyid, Ndf$country))) #cohorts
 length(unique(Ndf$country)) #Countries
-length(unique(paste0(Ndf$studyid, Ndf$subjid))) #Children
-length(unique(paste0(Ndf$studyid, Ndf$subjid, Ndf$agedays))) #Observations
-
-
-#--------------------------------------------
-# Get C+C manuscript N's
-#--------------------------------------------
-Ndf <- rbind(stunt, wast, waz) %>% filter(agedays < 24 * 30.4167)
-length(unique(paste0(Ndf$studyid, Ndf$country))) #cohorts
-length(unique(Ndf$country)) #Countries
-length(unique(paste0(Ndf$studyid, Ndf$subjid))) #Children
-length(unique(paste0(Ndf$studyid, Ndf$subjid, Ndf$agedays))) #Observations
+length(unique(paste0(Ndf$studyid,"_", Ndf$subjid))) #Children
+length(unique(paste0(Ndf$studyid, "_", Ndf$subjid, "_", Ndf$agedays))) #Observations
 

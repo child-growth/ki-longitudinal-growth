@@ -28,8 +28,8 @@ textcol = "grey20"
 #-----------------------------------
 # load the risk factor presence and N's
 #-----------------------------------
-rfp <- readRDS(here('results/cov_presence.rds'))
-rfn <- readRDS(here('results/cov_N.rds'))
+rfp <- readRDS(paste0(BV_dir,'/results/cov_presence.rds'))
+rfn <- readRDS(paste0(BV_dir,'/results/cov_N.rds'))
 
 # gather rf presence by study into long format
 rfp <- rfp %>% 
@@ -44,15 +44,22 @@ dim(rfp)
 dim(rfn)
 d <- merge(rfp, rfn, by = c("studyid", "country", "risk_factor"))
 dim(d)
+table(d$studyid)
+
 
 #Drop EE gestational age
 dim(d)
 d <- d %>% filter(!(studyid=="EE" & risk_factor=="gagebrth"))
 dim(d)
 
+unique(d$risk_factor)
+d <- d %>% filter(!(risk_factor %in% c("enstunt","enwast")))
+
+
 #Mark measure frequency
 d <- mark_measure_freq(d)
 d <- d %>% filter(measurefreq!="yearly")
+unique(d$studyid)
 
 #fix PROVIDE location
 d$country[d$study_id=="PROVIDE"] <- "BANGLADESH"
@@ -122,6 +129,8 @@ dd$RFlabel[dd$risk_factor=="sex"] <-  "Sex"
 dd$RFlabel[dd$risk_factor=="enwast"] <-  "Enrolled wasted"
 dd$RFlabel[dd$risk_factor=="enstunt"] <-  "Enrolled stunted"
 dd$RFlabel[dd$risk_factor=="gagebrth"] <-  "Gestational age at birth"
+dd$RFlabel[dd$risk_factor=="sga"] <-  "Small for gestational age"
+dd$RFlabel[dd$risk_factor=="SGA"] <-  "Small for gestational age"
 dd$RFlabel[dd$risk_factor=="predexfd6"] <-  "Excl/Pred breastfed <6mo."
 dd$RFlabel[dd$risk_factor=="mage"] <- "Mother's age" 
 dd$RFlabel[dd$risk_factor=="mhtcm"] <- "Mother's height" 
@@ -168,17 +177,20 @@ dd <- dd %>% filter(!is.na(RFlabel))
 # dfull <- dd
 # dd <- dd %>% filter(N>0) 
 
-# Sort by size 
-dd <- dd %>% group_by(region, risk_factor) %>% mutate(sumN=sum(N))
+# Sort by size and number of studies measurin RF
+dd <- dd %>% group_by(risk_factor) %>% mutate(sumN=sum(N), N_studies=sum(presence)) 
+            
 dd <- dd %>% 
   group_by(region) %>%
-  dplyr::arrange(-sumN, .by_group = TRUE) 
+  dplyr::arrange(-N_studies, -sumN, .by_group = TRUE) 
 dd$RFlabel <- factor(dd$RFlabel, levels = unique(dd$RFlabel))
 
+  temp <- dd %>% distinct(N_studies, sumN, risk_factor)
 
 
 #aggregate N's for topbar
-dhist_a <- dd %>% group_by(risk_factor) %>% summarize(N=sum(N))  %>% mutate(risk_factor=factor(risk_factor, levels=unique(dd$risk_factor))) %>% arrange(risk_factor)
+dhist_a <- dd %>% group_by(risk_factor) %>% summarize(N=sum(N), N_studies=max(N_studies))  %>%
+  mutate(risk_factor=factor(risk_factor, levels=unique(dd$risk_factor))) %>% arrange(risk_factor)
 
 
 dd <- dd %>% 
@@ -187,6 +199,9 @@ dd <- dd %>%
   dplyr::arrange(maxN, .by_group = TRUE) 
 dd$studycountry <- sapply(dd$studycountry, function(x) as.character(x))
 dd$studycountry <- factor(dd$studycountry, levels = unique(dd$studycountry))
+table(dd$studycountry)
+length(unique(dd$studycountry))
+
 
 #aggregate N's for sidebar
 dhist_c <- dd %>% group_by(region, studycountry) %>% summarize(N=max(N, na.rm=T))%>% mutate(studycountry=factor(studycountry, levels=unique(dd$studycountry))) %>% arrange(studycountry)
@@ -208,15 +223,15 @@ hm <- ggplot(dd,aes(x=RFlabel,y=studycountry, fill=factor(presence))) +
   scale_y_discrete(expand=c(0,0))+
   theme_grey(base_size=10)+
   theme(
-    aspect.ratio = 1,
+    #aspect.ratio = 1,
     legend.title=element_text(color=textcol,size=8),
     legend.margin = margin(grid::unit(0.1,"cm")),
     legend.text=element_text(colour=textcol,size=7,face="bold"),
     legend.key.height=grid::unit(0.2,"cm"),
     legend.key.width=grid::unit(1,"cm"),
     legend.position = "none",
-    axis.text.x=element_text(size=8,colour=textcol,angle=45,hjust=1),
-    axis.text.y=element_text(size=8,vjust = 0.2,colour=textcol),
+    axis.text.x=element_text(size=6,colour=textcol,angle=45,hjust=1),
+    axis.text.y=element_text(size=6,vjust = 0.2,colour=textcol),
     axis.ticks=element_line(size=0.4),
     plot.title=element_text(colour=textcol,hjust=0,size=12,face="bold"),
     strip.text.x = element_text(size=10),
@@ -242,17 +257,17 @@ nrfbar <- ggplot(dhist_a, aes(y = N/1000, x = risk_factor, fill=risk_factor)) +
     # make background white
     panel.background = element_blank(),
     panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-    plot.title=element_text(colour=textcol,hjust=0.04,size=12,face="bold"),
+    plot.title=element_text(colour=textcol,hjust=0, vjust=1,size=12,face="bold"),
     axis.title.x=element_blank(),
     axis.text.x=element_blank(),
     axis.ticks.x=element_blank(),
     panel.border = element_blank(),
     axis.title.y = element_text(size=10)
   ) +
-  scale_y_continuous(expand=c(0,0), limits=c(0,100),
-                     breaks=seq(0,100,by=20),labels=seq(0,100,by=20))+
-  ylab("Sample size (1000's)") + xlab("") +
-  geom_hline(yintercept = seq(0,100,by=20),color='white',size=0.3) +
+  scale_y_continuous(expand=c(0,0), limits=c(0,85),
+                     breaks=seq(0,80,by=20),labels=seq(0,80,by=20)) +
+  ylab("Sample size\n(1000's)") + xlab("") +
+  geom_hline(yintercept = seq(0,80,by=20),color='white',size=0.3) +
   ggtitle("a")
 
 
@@ -268,7 +283,7 @@ sidebar_c <- ggplot(data = dhist_c, aes(x = studycountry, y=N/1000, fill=region)
                     guide=guide_legend(title="",title.hjust = 0.5,
                                        label.position="bottom",label.hjust=0.5,nrow=1,
                                        override.aes = list(color = "white", fill="white"))) +
-  theme_grey(base_size=10) +
+  theme_grey(base_size=8) +
   theme(
     legend.title=element_text(color=textcol,size=8),
     legend.margin = margin(grid::unit(0.1,"cm")),
@@ -282,32 +297,27 @@ sidebar_c <- ggplot(data = dhist_c, aes(x = studycountry, y=N/1000, fill=region)
     strip.text.x = element_blank(),
     strip.text.y = element_blank(),
     axis.title.x = element_text(size=10),
-    plot.title=element_text(colour=textcol,hjust=0,size=12,face="bold"),
+    plot.title=element_text(colour=textcol,hjust=0,size=10,face="bold"),
     panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
     panel.background = element_blank()) +
   labs(x = "",y="Sample size (1000s)",title="c") +
   scale_y_continuous(expand=c(0,0),limits=c(0,30),
                      breaks=seq(0,30,by=5),labels=seq(0,30,by=5)) +
-  geom_hline(yintercept = seq(0,30,by=5),color='white',size=0.3)
+  geom_hline(yintercept = seq(0,30,by=5),color='white',size=0.5)
 
 
 
 # add margin around plots
-hm2 = hm + theme(plot.margin = unit(c(0,0,0,0), "cm")) #top, right, bottom, left
-#sidebar_c2 = sidebar_c + theme(plot.margin = unit(c(0,0.25,2.955,-2.75), "cm"))
-sidebar_c2 = sidebar_c + theme(plot.margin = unit(c(0,0.25,1.5,-2), "cm"))
-#nrfbar2 = nrfbar + theme(plot.margin = unit(c(0, 3.5, 0, 6.655), "cm"))
-nrfbar2 = nrfbar + theme(plot.margin = unit(c(0, 2.7, 0, 5.75), "cm"))
+hm2 = hm + theme(plot.margin = unit(c(0.3,1,1.2,0), "cm")) #top, right, bottom, left
+sidebar_c2 = sidebar_c + theme(plot.margin = unit(c(0.425,0.4,2.15,-0.8), "cm"))
+nrfbar2 = nrfbar + theme(plot.margin = unit(c(1, 1.6, 0, 2.5), "cm"))
 empty <- grid::textGrob("") 
 
-rfhmgrid <- grid.arrange(nrfbar2,empty, 
-                          hm2, sidebar_c2, nrow = 2, ncol = 2,
-                        heights = c(25,100),
-                        widths=c(100,20))
-
-
+rfhmgrid <- grid.arrange(nrfbar2, empty,  
+                         hm2, sidebar_c2, nrow = 2, ncol = 2,
+                         heights = c(25,100),
+                         widths=c(100,20))
 
 # save plot 
-ggsave(filename=here("figures/manuscript-figure-composites/risk-factor/fig-rf-heatmap.png"),
-       plot = rfhmgrid,device='png',width=12,height=9)
-
+ggsave(filename=paste0(BV_dir,"/figures/manuscript-figure-composites/risk-factor/fig-rf-heatmap.png"),
+       plot = rfhmgrid,device='png',width=18.3,height=18.6, units = 'cm')

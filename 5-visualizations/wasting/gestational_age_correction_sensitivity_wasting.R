@@ -19,6 +19,7 @@ d <- d %>% filter(studyid!="EE")
 
 #Clean country and cohort names and drop cohorts without gestational age
 d$country_f <- tolower(d$country)
+d$region[d$country_f=="tanzania, united republic of"] <- "Africa"
 d$country_f[d$country_f=="tanzania, united republic of"] <- "tanzania"
 d$studyid_f <- gsub("^k.*?-" , "", d$studyid)
 d$country_f <- str_to_title(d$country_f)
@@ -43,6 +44,8 @@ d_preterm$cohort[d_preterm$cohort=="TanzaniaChild2-Tanzania"] <- "Tanzania Child
 d_preterm
 
 
+summary(d$W_gagebrth)
+
 #---------------------------------------------------------
 # Histograms of GA by cohort
 #---------------------------------------------------------
@@ -50,7 +53,7 @@ d_preterm
 
 phist <- ggplot(d, aes(x=W_gagebrth)) + geom_histogram() + facet_wrap(~cohort, scales="free_y") +
   geom_vline(xintercept = c(168, 300)) + xlab("Gestational age in days at birth")
-ggsave(phist , file=paste0(here::here(), "/figures/wasting/fig-GA-by-cohort-histogram.png"), height=10, width=14)
+ggsave(phist , file=paste0(BV_dir, "/figures/wasting/fig-GA-by-cohort-histogram.png"), height=10, width=14)
 
 
 #---------------------------------------------------------
@@ -59,7 +62,9 @@ ggsave(phist , file=paste0(here::here(), "/figures/wasting/fig-GA-by-cohort-hist
 
 
 #Drop gestational ages under 24 weeks or over 300 days (no intergrowth standards) 
-d <- d %>% filter(W_gagebrth > 24 *7 & W_gagebrth <= 300) 
+nrow(d)
+d <- d %>% filter(W_gagebrth > 24 *7 & W_gagebrth <= 300) %>% droplevels()
+nrow(d)
 
 
 stunt <- d %>% filter(haz >= -6 & haz <=6,
@@ -92,6 +97,8 @@ uwt$waz_GA <- igb_value2zscore(uwt$W_gagebrth, uwt$wtkg, var = "wtkg", sex = uwt
 
 stunt$diff <- stunt$haz_GA - stunt$haz
 uwt$diff <- uwt$waz_GA - uwt$waz
+summary(stunt$diff)
+summary(uwt$diff)
 
 #Histograms of Z-score differences
 p1 <- ggplot(stunt, aes(x=diff)) + geom_density() + facet_wrap(~cohort, scales="free_y")  +
@@ -100,8 +107,8 @@ p1 <- ggplot(stunt, aes(x=diff)) + geom_density() + facet_wrap(~cohort, scales="
 p2 <- ggplot(uwt, aes(x=diff)) + geom_density() + facet_wrap(~cohort, scales="free_y")  +
   geom_vline(xintercept = 0) + ggtitle("Difference between GA corrected and uncorrected WAZ")
 
-ggsave(p1 , file=paste0(here::here(), "/figures/shared/fig-GA-correction-density-LAZ-monthly.png"), height=10, width=14)
-ggsave(p2 , file=paste0(here::here(), "/figures/shared/fig-GA-correction-density-WAZ-monthly.png"), height=10, width=14)
+ggsave(p1 , file=paste0(BV_dir, "/figures/shared/fig-GA-correction-density-LAZ-monthly.png"), height=10, width=14)
+ggsave(p2 , file=paste0(BV_dir, "/figures/shared/fig-GA-correction-density-WAZ-monthly.png"), height=10, width=14)
 
 
 #---------------------------------------------------------
@@ -126,7 +133,7 @@ prev.cohort <-
 
 underweight_prev_raw <- bind_rows(
   data.frame(cohort = "pooled", region = "Overall", prev.data$prev.res),
-  data.frame(cohort = "pooled", prev.region),
+  #data.frame(cohort = "pooled", prev.region),
   prev.cohort
 )
 
@@ -142,7 +149,7 @@ prev.cohort <-
 
 stunt_prev_raw <- bind_rows(
   data.frame(cohort = "pooled", region = "Overall", prev.data$prev.res),
-  data.frame(cohort = "pooled", prev.region),
+  #data.frame(cohort = "pooled", prev.region),
   prev.cohort
 )
 
@@ -164,7 +171,7 @@ prev.cohort <-
 
 underweight_prev_GA <- bind_rows(
   data.frame(cohort = "pooled", region = "Overall", prev.data$prev.res),
-  data.frame(cohort = "pooled", prev.region),
+  #data.frame(cohort = "pooled", prev.region), drop regional pooling because few studies
   prev.cohort
 )
 
@@ -180,15 +187,26 @@ prev.cohort <-
 
 stunt_prev_GA <- bind_rows(
   data.frame(cohort = "pooled", region = "Overall", prev.data$prev.res),
-  data.frame(cohort = "pooled", prev.region),
+  #data.frame(cohort = "pooled", prev.region), drop regional pooling because few studies
   prev.cohort
 )
 
 
 
-
 #---------------------------------------------------------
-#Make plotting data.frame
+# Overall change
+#---------------------------------------------------------
+stunt_prev_GA$est[stunt_prev_GA$cohort=="pooled" & stunt_prev_GA$region=="Overall"]
+stunt_prev_raw$est[stunt_prev_raw$cohort=="pooled" & stunt_prev_raw$region=="Overall"]
+underweight_prev_GA$est[underweight_prev_GA$cohort=="pooled" & underweight_prev_GA$region=="Overall"]
+underweight_prev_raw$est[underweight_prev_raw$cohort=="pooled" & underweight_prev_raw$region=="Overall"]
+
+stunt_prev_GA$est[stunt_prev_GA$cohort=="pooled" & stunt_prev_GA$region=="Overall"]-stunt_prev_raw$est[stunt_prev_raw$cohort=="pooled" & stunt_prev_raw$region=="Overall"]
+underweight_prev_GA$est[underweight_prev_GA$cohort=="pooled" & underweight_prev_GA$region=="Overall"]-underweight_prev_raw$est[underweight_prev_raw$cohort=="pooled" & underweight_prev_raw$region=="Overall"]
+
+
+#----------------------------------------------------------
+# Make plotting data.frame
 #---------------------------------------------------------
 
 df <- rbind(
@@ -224,7 +242,7 @@ df$cohort[df$cohort=="pooled"] <- paste0("Pooled - ", df$region[df$cohort=="pool
 
 #clean up cohort names
 unique(df$cohort)
-df$cohort <- gsub("TanzaniaChild2-TANZANIA, UNITED REPUBLIC OF", "Tanzania Child 2", df$cohort)
+df$cohort <- gsub("TanzaniaChild2-TANZANIA", "Tanzania Child 2", df$cohort)
 df$cohort <- gsub("INDIA", "India", df$cohort)
 df$cohort <- gsub("PAKISTAN", "Pakistan", df$cohort)
 df$cohort <- gsub("GAMBIA", "Gambia", df$cohort)
@@ -243,14 +261,14 @@ df$cohort_lab <- factor(df$cohort_lab, levels = rev(unique(df$cohort_lab)))
 df$Region <- df$region
                                               
 
-p <- ggplot(df,aes(y=est,x=cohort_lab)) +
+p <- ggplot(df, aes(y=est,x=cohort_lab)) +
   geom_errorbar(aes(color=Region, ymin=lb, ymax=ub, group=GA_correction), width = 0, position = position_dodge(0.4)) +
   geom_point(aes(fill=Region, color=Region, shape=GA_correction, group=GA_correction), size = 2, position = position_dodge(0.4)) +
   scale_fill_manual(values=tableau11) +
   scale_color_manual(values=tableau11) +
   xlab("Cohort")+
   ylab("Prevalence at birth") +
-  scale_shape_manual(values = c(4, 21)) +
+  scale_shape_manual(values = c(4, 21), guide = guide_legend(reverse = TRUE)) +
   scale_x_discrete(expand = expand_scale(add = 1)) +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 10))  +
   coord_flip() +
@@ -268,8 +286,8 @@ print(p)
 
 
 #Save plot and plot data
-ggsave(p, file=paste0(here::here(), "/figures/wasting/fig-GA-correction-sensitivity.png"), height=6, width=8)
+ggsave(p, file=paste0(BV_dir, "/figures/wasting/fig-GA-correction-sensitivity.png"), height=6, width=8)
 
-saveRDS(df, file=paste0(here::here(), "/figures/wasting/figure-data/fig-GA-correction-sensitivity.RDS"))
+saveRDS(df, file=paste0(BV_dir, "/figures/wasting/figure-data/fig-GA-correction-sensitivity.RDS"))
 
 

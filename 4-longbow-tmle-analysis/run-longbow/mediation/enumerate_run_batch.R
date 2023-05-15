@@ -1,6 +1,6 @@
 
 rm(list=ls())
-.libPaths( c( "/data/KI/R/x86_64-pc-linux-gnu-library/3.6/" , .libPaths() ) )
+.libPaths( c( "/data/KI/R/x86_64-pc-linux-gnu-library/4.0/" , .libPaths() ) )
 
 source(paste0(here::here(), "/0-config.R"))
 .libPaths( "~/rlibs" )
@@ -21,45 +21,25 @@ load(here("4-longbow-tmle-analysis","analysis specification","mediation.RData"))
 analyses
 
 analyses <- analyses %>% filter(A %in% c("fhtcm","mhtcm","mwtkg","mbmi"))
-enumerated_analyses <- lapply(seq_len(nrow(analyses)), specify_longbow)
 
 
-writeLines(jsonlite::toJSON(enumerated_analyses[[1]]),"single_mediation_analyses.json")
-writeLines(jsonlite::toJSON(enumerated_analyses),"all_mediation_analyses.json")
+specify_longbow_med<-function(j, analyses_df=analyses, params=default_params){
+  params$data$uri <- ghapdata_dir
+  params$data$repository_path <- NULL
+  
+  analysis <- analyses_df[j,]
+  analysis_params <- params
+  analysis_nodes <- as.list(analysis)[c("W","A","Y","strata","id")]
+  analysis_nodes$W <- gsub("W_bmi", "W_mbmi", analysis_nodes$W[[1]])
+  analysis_nodes$W <- gsub("vagbrth", "W_sga", analysis_nodes$W)
+  analysis_nodes$strata <- analysis$strata[[1]]
+  analysis_params$nodes <- analysis_nodes
+  analysis_params$data$uri <- paste0(analysis_params$data$uri, analysis$file)
+  analysis_params$script_params$parallelize <- TRUE
+  return(analysis_params)
+}
 
+enumerated_analyses <- lapply(seq_len(nrow(analyses)), specify_longbow_med)
 
-
-# 2. run batch
-
-configure_cluster(here("0-project-functions","cluster_credentials.json"))
-
-rmd_filename <- system.file("templates/longbow_RiskFactors.Rmd", package="longbowRiskFactors")
-#inputs <- "inputs_template.json"
-#inputs <- "single_bin_analysis.json"
-
-#run test/provisioning job
-#run_on_longbow(rmd_filename, inputs, provision = TRUE)
-
-# send the batch to longbow (with provisioning disabled)
-med_batch_inputs <- "all_mediation_analyses.json"
-med_batch_id <-  run_on_longbow(rmd_filename, med_batch_inputs, provision = FALSE)
-med_batch_id
-
-# wait for the batch to finish and track progress
-wait_for_batch(med_batch_id)
-
-# download the longbow outputs
-get_batch_results(med_batch_id, results_folder="results")
-length(dir("results"))
-
-# load and concatenate the rdata from the jobs
-results <- load_batch_results("results.rdata", results_folder = "results")
-obs_counts <- load_batch_results("obs_counts.rdata", results_folder = "results")
-
-# save concatenated results
-filename1 <- paste(paste('mediation',Sys.Date( ),sep='_'),'RDS',sep='.')
-filename2 <- paste(paste('mediation_obs_counts',Sys.Date( ),sep='_'),'RDS',sep='.')
-saveRDS(results, file=here("results","rf results","raw longbow results",filename1))
-saveRDS(obs_counts, file=here("results","rf results","raw longbow results",filename2))
-
-
+paste0(BV_dir,"/tmle/","mediation","/")
+run_ki_tmle(enumerated_analyses, results_folder="mediation", overwrite = T)

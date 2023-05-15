@@ -306,6 +306,9 @@ fit.rma <- function(data, ni, xi = NULL, yi = NULL, vi = NULL, measure = "PLO", 
           ub = plogis(fit$beta + 1.96 * fit$se),
           nmeas.f = paste0("N=", format(sum(data[[ni]]), big.mark = ",", scientific = FALSE), " ", nlab),
           nstudy.f = paste0("N=", nstudies, " studies"),
+          Qstat=fit$QE,
+          tau2=fit$tau2,
+          I2=fit$I2,
           method.used=method_fit
         ) %>%
         as.tibble()
@@ -414,7 +417,7 @@ fit.rma <- function(data, ni, xi = NULL, yi = NULL, vi = NULL, measure = "PLO", 
     out <- data %>%
       ungroup() %>%
       summarise(
-        nstudies = length(unique(studyid)),
+        nstudies = length(unique(paste0(studyid," ",country))),
         nmeas = sum(data[[ni]])
       ) %>%
       mutate(
@@ -427,7 +430,10 @@ fit.rma <- function(data, ni, xi = NULL, yi = NULL, vi = NULL, measure = "PLO", 
           " ", nlab
         ),
         nstudy.f = paste0("N=", nstudies, " studies"),
-        method.used=method_fit
+        method.used=method_fit,
+        Qstat=fit$QE,
+        tau2=fit$tau2,
+        I2=fit$I2
       )
     
   }
@@ -588,8 +594,145 @@ run_rma_agem <- function(data, n_name, x_name, label, method) {
   res$ptest.f <- sprintf("%0.0f", res$est)
   res$label <- label
 
-  res <- res %>% select(label, agem, nstudies, nmeas, everything())
+  res <- res %>% dplyr::select(label, agem, nstudies, nmeas, everything())
 
+  return(res)
+}
+
+
+##############################################
+# run_rma_agem_region
+##############################################
+
+
+# run fit.rma wrapper across a list of ages for age in months
+# Input:
+# data: 
+# n_name:
+# label:
+# method:
+
+# Returns:
+# est:
+# lb:
+# ub:
+# agecat:
+# ptest.f:
+# label:
+
+run_rma_agem_region <- function(data, n_name, x_name, label, method) {
+  
+  # create age list
+  agelist <- as.list(levels(data$agem))
+  
+  # create region datasets 
+  data <- mark_region(data)
+  
+  pool_by_age <- function(data, age){
+    res_list <- fit.rma(
+      data = data %>% filter(agem == age),
+      ni = n_name, xi = x_name, measure = "PLO", nlab = "children",
+      method = method
+    )  
+    return(res_list %>% mutate(agem=age))
+  }
+  
+  # apply fit.rma across age list
+  res.list.sasia <- lapply(agelist, function(x)
+    pool_by_age(data = data %>% filter(region=="South Asia"), age = x)
+  ) %>% bind_rows() %>% 
+    mutate(region="South Asia")
+  
+  res.list.latamer <- lapply(agelist, function(x)
+    pool_by_age(data = data %>% filter(region=="Latin America"), age = x)
+  ) %>% bind_rows() %>% 
+    mutate(region="Latin America")
+  
+  res.list.africa <- lapply(agelist, function(x)
+    pool_by_age(data = data %>% filter(region=="Africa"), age = x)
+  ) %>% bind_rows() %>% 
+    mutate(region="Africa")
+  
+  # combine output
+  res <- bind_rows(res.list.sasia, res.list.latamer, res.list.africa) %>% 
+    as.data.frame()
+  
+  # tidy up output
+  res[, 3] <- as.numeric(res[, 3])
+  res[, 5] <- as.numeric(res[, 5])
+  res[, 6] <- as.numeric(res[, 6])
+  res <- res %>% mutate(est = est * 100, lb = lb * 100, ub = ub * 100)
+  res$agem <- factor(levels(data$agem), levels = levels(data$agem))
+  res$ptest.f <- sprintf("%0.0f", res$est)
+  res$label <- label
+  
+  res <- res %>% dplyr::select(region, label, agem, nstudies, nmeas, everything())
+  
+  return(res)
+}
+
+
+
+##############################################
+# run_rma_agem_birthlaz
+##############################################
+
+
+# run fit.rma wrapper across a list of ages for age in months
+# Input:
+# data: 
+# n_name:
+# label:
+# method:
+
+# Returns:
+# est:
+# lb:
+# ub:
+# agecat:
+# ptest.f:
+# label:
+
+run_rma_agem_birthlaz <- function(data, n_name, x_name, label, method) {
+  
+  # create age list
+  agelist <- as.list(levels(data$agem))
+  
+  pool_by_age <- function(data, age){
+    res_list <- fit.rma(
+      data = data %>% filter(agem == age),
+      ni = n_name, xi = x_name, measure = "PLO", nlab = "children",
+      method = method
+    )  
+    return(res_list %>% mutate(agem=age))
+  }
+  
+  # apply fit.rma across age list and birth laz categories
+  birth_cats = unique(data$birth_laz[!is.na(data$birth_laz)])
+  
+  res_all = list()
+  for(i in 1:length(birth_cats)){
+    res_all[[i]] <- lapply(agelist, function(x)
+      pool_by_age(data = data %>% filter(birth_laz==birth_cats[[i]]), 
+                  age = x)
+    ) %>% bind_rows() %>% 
+      mutate(birth_laz=birth_cats[[i]])
+  }
+  
+  # combine output
+  res = bind_rows(res_all) %>% as.data.frame()
+  
+  # tidy up output
+  res[, 3] <- as.numeric(res[, 3])
+  res[, 5] <- as.numeric(res[, 5])
+  res[, 6] <- as.numeric(res[, 6])
+  res <- res %>% mutate(est = est * 100, lb = lb * 100, ub = ub * 100)
+  res$agem <- factor(levels(data$agem), levels = levels(data$agem))
+  res$ptest.f <- sprintf("%0.0f", res$est)
+  res$label <- label
+
+  res <- res %>% dplyr::select(birth_laz, label, agem, nstudies, nmeas, everything())
+  
   return(res)
 }
 
@@ -674,7 +817,7 @@ ki.glm <- function(data, y, levels, ref, comp) {
 # gamCI
 ##############################################
 
-# ?????????
+# Simultaneous CI's around a GAM fit
 # Input
 # m:
 # newdata:
@@ -731,12 +874,9 @@ mean_sd <- function(x) {
 # mean_sd
 ##############################################
 
-# calculate ??
+# calculate and print mean and SD of a variable
 # Input
 # x: data
-
-# Returns
-# ???
 
 N_perc <- function(x) {
   print(table(x))
@@ -913,6 +1053,7 @@ cohort.format <- function(df, lab, y, est = "NA") {
       country == "MALAWI" |
       country == "SOUTH AFRICA" |
       country == "TANZANIA, UNITED REPUBLIC OF" |
+      country == "TANZANIA" |
       country == "ZIMBABWE" |
       country == "GAMBIA" ~ "Africa",
     country == "BELARUS" ~ "Europe",
@@ -996,19 +1137,19 @@ mean95CI <- function(Y, id = rep(1:length(Y)), persontime = NULL, proportion = F
 
 # returns a string with a standardized naming convention
 # To get a link to the csv version of a Google Sheet do the following commands:
-#     - File > Publish to Web > Link > Comma Seperated Values (csv) 
+#     - File > Publish to Web > Link > Comma Separated Values (csv) 
 #----------------------------------------------
 
 create_name = function(outcome, cutoff, measure, population, 
                        location, age, analysis){
   
-  transformations = read.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vREmg4PurW2AKddhf1Mtj9dAyaeCeYPUpHurNUe3r0gVVeeLrkS3aU-4XlYhZ96iWsBpr-R9sDT8Alp/pub?gid=0&single=true&output=csv")
+  transformations = read.csv(filenames)
   
   # define short versions of each feature
   outcome_s = transformations %>% 
     filter(variable.type == "outcome") %>% 
     filter(description == outcome) %>% 
-    select(variable) %>%
+    dplyr::select(variable) %>%
     first()
   
   cutoff_s = cutoff
@@ -1016,31 +1157,31 @@ create_name = function(outcome, cutoff, measure, population,
   measure_s = transformations %>% 
     filter(variable.type == "measure") %>% 
     filter(description == measure) %>% 
-    select(variable) %>%
+    dplyr::select(variable) %>%
     first()
   
   population_s = transformations %>% 
     filter(variable.type == "population") %>% 
     filter(description == population) %>% 
-    select(variable) %>%
+    dplyr::select(variable) %>%
     first()
   
   location_s = transformations %>% 
     filter(variable.type == "location") %>% 
     filter(description == location) %>% 
-    select(variable) %>%
+    dplyr::select(variable) %>%
     first()
   
   age_s = transformations %>% 
     filter(variable.type == "age") %>% 
     filter(description == age) %>%
-    select(variable) %>%
+    dplyr::select(variable) %>%
     first()
   
   analysis_s = transformations %>% 
     filter(variable.type == "analysis") %>% 
     filter(description == analysis) %>%
-    select(variable) %>%
+    dplyr::select(variable) %>%
     first()
   
   # create figure name string using short versions of each feature

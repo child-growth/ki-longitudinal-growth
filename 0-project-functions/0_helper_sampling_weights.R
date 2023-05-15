@@ -1,3 +1,50 @@
+
+weighted_gam_estimate <- function(df, K=NULL, cluster=T) {
+  
+  df <-df %>% mutate(dummy=1)
+  fiti <- NULL
+  if(cluster){
+    if(is.null(K)){
+      try(fiti <- mgcv::gam(zscore ~ s(agem, bs = "cr")+ s(cluster_no,bs="re",by=dummy), data = df, weights = weight))
+    }else{
+      try(fiti <- mgcv::gam(zscore ~ s(agem, bs = "cr")+ s(cluster_no,bs="re",by=dummy), data = df, weights = weight))
+    }
+  }else{
+    if(is.null(K)){
+      try(fiti <- mgcv::gam(zscore ~ s(agem, bs = "cr"), data = df, weights = weight))
+    }else{
+      try(fiti <- mgcv::gam(zscore ~ s(agem, bs = "cr"), data = df, weights = weight))
+    }
+  }
+  pred.df <- data.frame(agem=0:24, dummy=0, weight=1, cluster_no=1)
+  pred    <- as.numeric(predict(fiti,newdata=pred.df,type="response"))
+  
+  #get the prediction matrix
+  try(Xp <- predict(fiti,newdata=pred.df,type="lpmatrix"))
+  se <- sqrt(diag( Xp%*%vcov(fiti)%*%t(Xp) ) )
+  
+  # calculate upper and lower bounds
+  lb <- pred - 1.96*se
+  ub <- pred + 1.96*se
+  
+  # tabulate indicator by region
+  df_survey <- data.frame(agem=0:24, fit=pred, fit_lb=lb, fit_ub=ub)
+  return(df_survey)
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 library(survey)
 # The most conservative approach would be to center any single-PSU strata around
 # the sample grand mean rather than the stratum mean
@@ -21,27 +68,7 @@ compute_ci_with_sampling_weights <- function(df) {
   return(df_survey)
 }
 
-# meta analysis using fixed effects or random effects based pooling
-# fit.cont.rma <- function(data, age, yi, vi, ni, nlab, method = "REML") {
-#   data <- filter(data, agecat == age)
-#   fit <- NULL
-#   try(fit <- rma(yi = data[[yi]], vi = data[[vi]], method = method, measure = "GEN"))
-#   out <- data %>%
-#     ungroup() %>%
-#     summarise(
-#       nstudies = length(unique(studyid)),
-#       nmeas = sum(data[[ni]][agecat == age])
-#     ) %>%
-#     mutate(
-#       agecat = age, est = fit$beta, se = fit$se, lb = fit$ci.lb, ub = fit$ci.ub,
-#       nmeas.f = paste0(
-#         "N=", format(sum(data[[ni]]), big.mark = ",", scientific = FALSE),
-#         " ", nlab
-#       ),
-#       nstudy.f = paste0("N=", nstudies, " studies")
-#     )
-#   return(out)
-# }
+
 
 do_metaanalysis <- function(df_survey, pool_over, method = "FE") {
   # method = "REML"
@@ -96,7 +123,6 @@ do_metaanalysis <- function(df_survey, pool_over, method = "FE") {
 # which allows for undertainty in the actual
 # estimated mean as well
 # (Marra & Wood 2012 Scandinavian Journal of Statistics,
-#  Vol. 39: 53–74, 2012, doi: 10.1111/j.1467-9469.2011.00760.x )
 # simultaneous CIs provide much better coverage than pointwise CIs
 # see: http://www.fromthebottomoftheheap.net/2016/12/15/simultaneous-interval-revisited/
 #----------------------------------

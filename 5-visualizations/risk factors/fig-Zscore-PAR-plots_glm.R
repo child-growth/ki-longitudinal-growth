@@ -101,16 +101,8 @@ par$RFlabel[par$RFlabel=="Gestational age at birth"] <- "Gestational age"
 
 
 par <- par %>% filter( agecat=="24 months", region=="Pooled", !is.na(PAR)) %>%
-  #mutate(RFlabel_ref = expression(bold(RFlabel)~' shifted to '~bold(intervention_level)))
-  #mutate(RFlabel_ref = gsub(", ref: "," shifted to ",RFlabel_ref))
   mutate(RFlabel_ref = paste0(RFlabel," shifted to ", intervention_level))
 
-#Bold the intervention variable
-# https://stackoverflow.com/questions/37758050/ggplot-displaying-expression-in-x-axis
-# 
-#  as.expression(bold(par$RFlabel[1])~' shifted to '~bold(par$intervention_level[1]))
-#  as.expression(bquote(bold(par$RFlabel[1])))
-#  parse(text= paste("bold(par$RFlabel[", 1:7, "])", sep="") ) 
 
 
 unique(par$RFlabel_ref)
@@ -208,4 +200,4 @@ library(cowplot)
 
 p <- grid.arrange(pPAR_laz, pPAR_wlz, ncol=2)
 
-ggsave(p, file=here("/figures/risk-factor/fig-PAR-GLM-sensitivity.png"),  height=10, width=16)
+ggsave(p, file=paste0(BV_dir,"/figures/risk-factor/fig-PAR-GLM-sensitivity.png"),  height=10, width=16)

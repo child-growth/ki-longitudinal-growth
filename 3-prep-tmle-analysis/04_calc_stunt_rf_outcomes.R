@@ -52,7 +52,7 @@ stunt_ci_6_24 = d6 %>% ungroup() %>%
   mutate(agecat="6-24 months", minhaz=min(haz), ever_stunted=ifelse(minhaz< -2,1,0), ever_sstunted=ifelse(minhaz< (-3),1,0), Nobs=n()) %>% slice(1) %>%
   mutate(N=n()) %>%
   ungroup() %>%
-  select(studyid,subjid, country,tr,agedays,haz, measurefreq, measid, agecat,minhaz, ever_stunted,Nobs, N, anystunt06)
+  select(studyid,subjid, country,tr,agedays,haz, measurefreq, measid, agecat,minhaz, ever_stunted,ever_sstunted,Nobs, N)
 
 
 #calculate any stunting from 0-24
@@ -64,9 +64,23 @@ stunt_ci_0_24 = d6 %>% ungroup() %>%
   mutate(N=n()) %>%
   ungroup() 
 
+#calculate stunting reversal
+stunt_rec = d6 %>% ungroup() %>%
+  filter(agecat %in% c("0-6 months", "18-24 months")) %>%
+  group_by(studyid,country,subjid, agecat) %>%
+  summarise(N=n(), stunt_inc = 1*!(min(haz) < -2)) %>% #flip so 0 is still stunted and 1 is recovered
+  ungroup()  %>%
+  filter((N>=2 & agecat=="18-24 months") |  
+           (N>=2 & agecat=="0-6 months" & stunt_inc==0)) %>% 
+  group_by(studyid,country,subjid) %>% 
+  mutate(Nagecats=n()) %>% filter(Nagecats==2) %>%
+  filter(agecat=="18-24 months") %>%
+  droplevels()
+
+
 stunt_ci_6_24 <- stunt_ci_6_24 %>% subset(., select = -c(anystunt06))
 cuminc <- bind_rows(stunt_ci_0_6, stunt_ci_6_24, stunt_ci_0_24)
-
+cuminc <- cuminc  %>% subset(., select = -c(sex))
 
 
 #--------------------------------------
@@ -86,7 +100,7 @@ stunt_ci_0_6_no_birth = d6 %>% ungroup() %>%
   mutate(agecat="0-6 months (no birth st.)", minhaz=min(haz), ever_stunted=ifelse(minhaz< -2,1,0), ever_sstunted=ifelse(minhaz< (-3),1,0), Nobs=n()) %>% slice(1) %>%
   mutate(N=n()) %>%
   ungroup() %>%
-  select(studyid,subjid, country,tr,agedays,haz, measurefreq, measid, agecat,minhaz, ever_stunted,Nobs,N)
+  select(studyid,subjid, country,tr,agedays,haz, measurefreq, measid, agecat,minhaz, ever_stunted,ever_sstunted,Nobs,N)
 
 stunt_ci_0_24_no_birth = d6 %>% ungroup() %>% 
   filter(!is.na(agecat)) %>%
@@ -98,9 +112,9 @@ stunt_ci_0_24_no_birth = d6 %>% ungroup() %>%
   mutate(agecat="0-24 months (no birth st.)", minhaz=min(haz), ever_stunted=ifelse(minhaz< -2,1,0), ever_sstunted=ifelse(minhaz< (-3),1,0), Nobs=n()) %>% slice(1) %>%
   mutate(N=n()) %>%
   ungroup() %>%
-  select(studyid,subjid, country,tr,agedays,haz, measurefreq, measid, agecat,minhaz, ever_stunted,Nobs,N)
+  select(studyid,subjid, country,tr,agedays,haz, measurefreq, measid, agecat,minhaz, ever_stunted,ever_sstunted,Nobs,N)
 
-cuminc_nobirth <- rbind(stunt_ci_0_6_no_birth, stunt_ci_0_24_no_birth)
+cuminc_nobirth <- bind_rows(stunt_ci_0_6_no_birth, stunt_ci_0_24_no_birth, stunt_ci_6_24)
 
 
 table(cuminc$ever_stunted[cuminc$agecat=="0-6 months"])
@@ -109,7 +123,8 @@ table(cuminc_nobirth$ever_stunted[cuminc_nobirth$agecat=="0-6 months (no birth s
 table(cuminc$ever_stunted[cuminc$agecat=="0-24 months"])
 table(cuminc_nobirth$ever_stunted[cuminc_nobirth$agecat=="0-24 months (no birth st.)"])
 
-
+head(cuminc)
+head(cuminc_nobirth)
 
 
 #--------------------------------------
@@ -138,7 +153,7 @@ prev = dmn %>%
 
 # save mean Z scores at each age
 meanHAZ = dmn %>% 
-  filter(agecat=="Birth" | agecat=="6 months" | agecat=="24 months") %>%
+  filter(agecat=="Birth" | agecat=="6 months" | agecat=="18 months" | agecat=="24 months") %>%
   select(studyid,subjid,country,agecat,
          haz)
 
@@ -207,8 +222,8 @@ rec.24 <- d %>%
   select(-c(maxrec))
 
 rev <- full_join(stunt.03, rec.24,by=c("studyid","country","subjid")) %>%
-  mutate(s03rec24=ifelse(stunted03==1 & rec24==1,1,0)) %>%
-  select(studyid, country,subjid, s03rec24)
+  mutate(s03rec24=ifelse(stunted03==1 & rec24==1,1,0), agecat="0-24 months") %>%
+  select(studyid, country,subjid, s03rec24, agecat)
 
 #--------------------------------------
 # Format and subset the growth velocity dataset
@@ -258,10 +273,14 @@ vel_wtkg <- vel %>% filter(ycat=="wtkg") %>% subset(., select=c(studyid, country
 #--------------------------------------
 
 
-save(prev, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/st_prev_outcomes.RData")
-save(meanHAZ, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/st_meanZ_outcomes.RData")
-save(cuminc, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/st_cuminc_outcomes.rdata")
-save(cuminc_nobirth, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/st_cuminc_outcomes_nobirth.rdata")
-save(rev, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/st_rec_outcomes.RData")
-save(vel_haz, vel_lencm, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/st_vel_outcomes.RData")
-save(vel_waz, vel_wtkg, file="/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/waz_vel_outcomes.RData")
+save(prev, file=paste0(ghapdata_dir,"st_prev_outcomes.RData"))
+save(meanHAZ, file=paste0(ghapdata_dir,"st_meanZ_outcomes.RData"))
+save(cuminc, file=paste0(ghapdata_dir,"st_cuminc_outcomes.rdata"))
+save(cuminc_nobirth, file=paste0(ghapdata_dir,"st_cuminc_outcomes_nobirth.rdata"))
+save(rev, file=paste0(ghapdata_dir,"st_rec_outcomes.RData"))
+save(stunt_rec, file=paste0(ghapdata_dir,"st_inc_recovery_outcomes.RData"))
+save(vel_haz, file=paste0(ghapdata_dir,"haz_vel_outcomes.RData"))
+save(vel_waz, file=paste0(ghapdata_dir,"waz_vel_outcomes.RData"))
+save(vel_lencm, file=paste0(ghapdata_dir,"len_vel_outcomes.RData"))
+save(vel_wtkg, file=paste0(ghapdata_dir,"weight_vel_outcomes.RData"))
+

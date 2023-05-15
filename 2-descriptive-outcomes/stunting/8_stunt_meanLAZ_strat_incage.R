@@ -37,6 +37,12 @@ d <- readRDS(paste0(ghapdata_dir, "stunting_data.rds"))
 
 d_st <- d %>% filter(measurefreq == "monthly") %>% filter(agedays <= 30.4167*15.5)
 
+#-------------------------------------------
+# check included cohorts
+#-------------------------------------------
+assert_that(setequal(unique(d_st$studyid), monthly_cohorts),
+            msg = "Check data. Included cohorts do not match.")
+
 #----------------------------------------
 # Create indicator for incident stunting
 # at birth, after birth to 3 months, 
@@ -44,6 +50,11 @@ d_st <- d %>% filter(measurefreq == "monthly") %>% filter(agedays <= 30.4167*15.
 #----------------------------------------
 
 d_st = create_stunting_age_indicators(data = d_st)
+
+# mean LAZ at birth within each age of stunting 
+d_st %>% group_by(stunt_inc_age) %>% 
+  filter(agedays < 30.4167) %>% 
+  summarise(mean_laz_birth = mean(haz))
 
 #----------------------------------------
 # subset to studies that have monthly measurement
@@ -59,7 +70,7 @@ d_st_monthly <- d_st %>% filter(studyid %in% study24)
 d_st_monthly %>% group_by(studyid, subjid) %>% slice(1) %>% 
   filter(!is.na(stunt_inc_age)) %>%
   ungroup() %>% mutate(tot_N=n()) %>%
-  group_by(stunt_inc_age) %>% summarize(N=n(), tot_N=tot_N[1]) %>%
+  group_by(stunt_inc_age) %>% summarise(N=n(), tot_N=tot_N[1]) %>%
   mutate(prop=N/tot_N*100)
 
 #######################################################################
@@ -69,13 +80,15 @@ d_st_monthly %>% group_by(studyid, subjid) %>% slice(1) %>%
 #----------------------------------------
 # monthly mean haz within incident age categories
 #----------------------------------------
-age_list = list("Never", "Birth", "0-3 months", "3-6 months", "6-9 months","9-12 months", "12-15 months")
+age_list = list("Never", "Birth", "0-6 months", "6-15 months")
+
+# TO DO : fix age categories within the function or original data, not working for 0-6, 6-15
 
 meanlaz = function(data, age){ 
   dmon = calc.monthly.agecat(d = data %>% filter(stunt_inc_age == age))
   dmon <- droplevels(dmon)
   
-  monthly.haz.data   <-  summary.haz(d = dmon)
+  monthly.haz.data   <-  summary.haz(d = dmon, nmeas_threshold = 5)
   monthly.haz.region <-  dmon  %>% group_by(region) %>% do(summary.haz(., nmeas_threshold = 5)$haz.res)
   monthly.haz.cohort <-  monthly.haz.data$haz.cohort %>% 
     subset(., select = c(cohort, region, agecat, nmeas,  meanhaz,  ci.lb,  ci.ub)) %>%
@@ -98,9 +111,28 @@ meanlaz = function(data, age){
 
 meanlaz_age_incage = lapply(age_list, function(x) meanlaz(data = d_st, age=x))
 meanlaz_age_incage = as.data.frame(do.call(rbind, meanlaz_age_incage))
-saveRDS(meanlaz_age_incage, file = paste0(res_dir, "meanlaz_age_incage.RDS"))
+saveRDS(meanlaz_age_incage, file = paste0(res_dir, "stunting/meanlaz_age_incage.RDS"))
 
 meanlaz_age_incage_monthly = lapply(age_list, function(x) meanlaz(data = d_st_monthly, age=x))
 meanlaz_age_incage_monthly = as.data.frame(do.call(rbind, meanlaz_age_incage_monthly))
-saveRDS(meanlaz_age_incage_monthly, file = paste0(res_dir, "meanlaz_age_incage_monthly.RDS"))
- 
+saveRDS(meanlaz_age_incage_monthly, file = paste0(res_dir, "stunting/meanlaz_age_incage_monthly.RDS"))
+
+
+#Get I2 median/IQR
+meanlaz_age_incage %>% filter(cohort=="pooled") %>%
+  group_by(region) %>%
+  summarise(quantile = c("Median","Q1", "Q3"),
+            I2 = quantile(I2, c(0.5, 0.25, 0.75), na.rm=TRUE)) %>%
+  spread(quantile, I2) %>%
+  mutate(region=factor(region, levels=c("Overall","Africa","Latin America","South Asia"))) %>% 
+  arrange(region)
+
+
+meanlaz_age_incage_monthly %>% filter(cohort=="pooled") %>%
+  group_by(region) %>%
+  summarise(quantile = c("Median","Q1", "Q3"),
+            I2 = quantile(I2, c(0.5, 0.25, 0.75), na.rm=TRUE)) %>%
+  spread(quantile, I2) %>%
+  mutate(region=factor(region, levels=c("Overall","Africa","Latin America","South Asia"))) %>% 
+  arrange(region)
+

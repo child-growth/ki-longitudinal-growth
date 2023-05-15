@@ -5,27 +5,6 @@
 #-----------------------------------
 
 
-#-----------------------------------------------------------------------------------------
-# Load FINAL dataset and drop studies 
-# Output: long form dataset with all variables used in the ki manuscript analysis, minus those 
-# covariates created from raw SAS datasets
-#
-# Author: Andrew Mertens (amertens@berkeley.edu)
-#-----------------------------------------------------------------------------------------
-
-
-
-# Instructions for downloading FINAL dataset
-
-# Go to https://git.ghap.io/stash/projects/HBGD/repos/adhoc/browse
-# click clone button
-# Copy link (mine is https://andrew.mertens@git.ghap.io/stash/scm/hbgd/adhoc.git)
-# Open Sourcetree (Click window icon in bottom left, then search magnifying glass icon
-# in the top right, and search Sourcetree to find)
-# Click clone button in source tree 
-# Paste link in source path box
-# Add U:/data/FINAL/ to the destination path (make sure FINAL folder is empty)
-# Click clone
 
 
 
@@ -44,29 +23,36 @@ d <- d[!is.na(brthyr)]
 
 
 #Drop yearly studies
+
+
 monthly_vec <- c("MAL-ED",   
                  "CMC-V-BCS-2002",              
-                 "IRC",               
+                 "IRC",    
+                 "TDC",
                  "EE",           
                  "ResPak",  
                  "PROVIDE",  
                  "TanzaniaChild2",           
                  "Keneba",  
                  "Guatemala BSC",       
-                 "GMS-Nepal",             
+                 "GMS-Nepal",    
+                 "CMIN Peru89",                 
+                 "CMIN Peru95",                 
+                 "CMIN Bangladesh93",                 
                  "CONTENT")
 
 quarterly_vec <- c("iLiNS-Zinc",  
                    "JiVitA-3",          
                    "JiVitA-4", 
                    "LCNI-5",          
+                   "CMIN Brazil89",                 
+                   "CMIN GB94",                 
                    "NIH-Birth",
                    "NIH-Crypto",   
                    "PROBIT",         
                    "SAS-CompFeed",   
                    "SAS-FoodSuppl",   
                    "ZVITAMBO",   
-                   "CMIN",                 
                    "COHORTS")
 
 yearly_vec <- c("WASH-Bangladesh",       
@@ -80,8 +66,8 @@ yearly_vec <- c("WASH-Bangladesh",
                 "Vitamin-B12",
                 "Serrinha-VitA",   
                 "EU",        
-                "ZnMort"
-)
+                "ZnMort")
+
 
 
 d <- d[, measurefreq := c("monthly", "quarterly", "yearly")[1* (studyid %in% monthly_vec) +
@@ -131,9 +117,6 @@ d <- d %>%
 #Scatterplot by region
 p <- ggplot(d, aes(x=brthyr, y=haz, color=Region, group=Region)) + 
   geom_point(alpha=0.05) + 
-  # geom_point(aes(y=med_haz), color="black", shape=95, size=4, stroke=3) + 
-  # geom_point(aes(y=Q1), color="grey50", shape=95, size=3, stroke=3) + 
-  # geom_point(aes(y=Q3), color="grey50", shape=95, size=3, stroke=3) + 
   geom_smooth(aes(y=med_haz), color="black", se=F) + 
   geom_smooth(aes(y=Q1), color="black", linetype="dashed", se=F) + 
   geom_smooth(aes(y=Q3), color="black", linetype="dashed", se=F) + 
@@ -143,7 +126,7 @@ p <- ggplot(d, aes(x=brthyr, y=haz, color=Region, group=Region)) +
   guides(color = guide_legend(override.aes = list(alpha=1)))
 
 
-ggsave(p, file = here::here("/figures/shared/laz_secular_trend.png"), width=8, height=4)
+ggsave(p, file = paste0(BV_dir,"/figures/shared/laz_secular_trend.png"), width=8, height=4)
 
 
 
@@ -211,8 +194,8 @@ pWhz <- ggplot(d, aes(x=brthyr, y=whz, color=Region, group=Region)) + geom_point
   guides(color = guide_legend(override.aes = list(alpha=1)))
 
 
-ggsave(pHaz, file = here::here("/figures/shared/laz_secular_trend_monthly.png"), width=8, height=4)
-ggsave(pWaz, file = here::here("/figures/shared/waz_secular_trend_monthly.png"), width=8, height=4)
-ggsave(pWhz, file = here::here("/figures/shared/wlz_secular_trend_monthly.png"), width=8, height=4)
+ggsave(pHaz, file = paste0(BV_dir,"/figures/shared/laz_secular_trend_monthly.png"), width=8, height=4)
+ggsave(pWaz, file = paste0(BV_dir,"/figures/shared/waz_secular_trend_monthly.png"), width=8, height=4)
+ggsave(pWhz, file = paste0(BV_dir,"/figures/shared/wlz_secular_trend_monthly.png"), width=8, height=4)
 
 

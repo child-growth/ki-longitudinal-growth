@@ -8,7 +8,7 @@ source(paste0(here::here(), "/0-project-functions/0_risk_factor_functions.R"))
 
 
 #Load data
-dfull <- readRDS(paste0(here::here(),"/results/rf results/full_RF_unadj_results.rds"))
+dfull <- readRDS(paste0(BV_dir,"/results/rf results/full_RF_unadj_results.rds"))
 head(dfull)
 
 
@@ -26,6 +26,9 @@ RMAest <- d %>% group_by(intervention_variable, agecat, intervention_level, base
   do(poolRR(.)) %>% as.data.frame()
 RMAest$region <- "Pooled"
 
+RMAest %>% filter(intervention_variable=="birthwt", agecat=="24 months",outcome_variable %in% c("stunted","wasted"), region=="Pooled"|region=="Africa") %>% select(outcome_variable,intervention_level,   RR, RR.CI1, RR.CI2, region) 
+
+
 RMAest_region <- d %>% group_by(region, intervention_variable, agecat, intervention_level, baseline_level, outcome_variable) %>%
   do(poolRR(.)) %>% as.data.frame()
 
@@ -41,4 +44,4 @@ RMAest_clean <- RMA_clean(RMAest_raw)
 RMAest_clean$RFlabel_ref <- paste0(RMAest_clean$RFlabel, ", ref: ", RMAest_clean$intervention_level)
 
 #Save cleaned data
-saveRDS(RMAest_clean, paste0(here::here(),"/results/rf results/pooled_RR_results_unadj.rds"))
+saveRDS(RMAest_clean, paste0(BV_dir,"/results/rf results/pooled_RR_results_unadj.rds"))

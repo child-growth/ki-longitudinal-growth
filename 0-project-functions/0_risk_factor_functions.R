@@ -1,21 +1,126 @@
 
 #-----------------------------------------------------------------------------------------
+# local TMLE function
+#-----------------------------------------------------------------------------------------
+
+
+run_ki_tmle <- function(enumerated_analyses, results_folder, overwrite=TRUE, skip_failed=F,
+                        rmd_filename = here("4-longbow-tmle-analysis/run-longbow/longbow_RiskFactors.Rmd")){
+  
+  Sys.getenv("RSTUDIO_PANDOC")
+  Sys.setenv(RSTUDIO_PANDOC="/usr/lib/rstudio-server/bin/pandoc")
+  rmarkdown::pandoc_available()
+  rmarkdown::pandoc_version()
+  
+  
+  base_directory = paste0(BV_dir,"/tmle/",results_folder,"/")
+  for(i in 1:length(enumerated_analyses)){
+    cat(i," out of ",length(enumerated_analyses),"\n")
+    output_directory = paste0(base_directory,
+                              enumerated_analyses[[i]]$nodes$A,"_",
+                              enumerated_analyses[[i]]$nodes$Y)
+    enumerated_analyses[[i]]$output_directory <- output_directory
+    cat(i,"; ", enumerated_analyses[[i]]$nodes$A,"; ", enumerated_analyses[[i]]$nodes$Y,"; res exists: ",file.exists(paste0(output_directory,"/results.rdata")),"\n")
+    
+    
+    if(overwrite==TRUE | !file.exists(paste0(output_directory,"/results.rdata"))){
+    time_run <- "fail"
+      if(skip_failed==F| !file.exists(paste0(output_directory,"/obs_counts.rdata"))){
+    try(time_run<-system.time(rmarkdown::render(rmd_filename,
+                                                params = (enumerated_analyses[[i]]),
+                                                output_file = file.path( output_directory, "/REPORT.html"),
+                                                output_dir = output_directory,
+                                                quiet=TRUE,
+                                                output_format = rmarkdown::html_document(self_contained = TRUE,
+                                                                                         keep_md = F),
+                                                knit_root_dir = output_directory)))
+    
+    cat("\nruntime: ",time_run,"\n")
+      }
+    }
+  }
+  
+  # # load and concatenate the rdata from the jobs
+  results <- load_batch_results("results.rdata", results_folder = base_directory)
+  obs_counts <- load_batch_results("obs_counts.rdata", results_folder = base_directory)
+  
+  print(head(results))
+  
+  # save concatenated results
+  filename1 <- paste(paste('results',results_folder,Sys.Date( ),sep='_'),'RDS',sep='.')
+  filename2 <- paste(paste('results',results_folder,'obs_counts',Sys.Date( ),sep='_'),'RDS',sep='.')
+  saveRDS(results, file=paste0(res_dir,"rf results/raw longbow results/",filename1))
+  saveRDS(obs_counts, file=paste0(res_dir,"rf results/raw longbow results/",filename2))
+  
+  cat("\nAll done!\n")
+}
+
+#-----------------------------------------------------------------------------------------
 # Longbow prep function
 #-----------------------------------------------------------------------------------------
 
+
 specify_longbow <- function(j, analyses_df=analyses, params=default_params){
-  params$data$uri <- "/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/"
-  params$data$type <- "web"
+  params$data$uri <- ghapdata_dir
   params$data$repository_path <- NULL
   
   analysis <- analyses_df[j,]
   analysis_params <- params
   analysis_nodes <- as.list(analysis)[c("W","A","Y","strata","id")]
   analysis_nodes$W <- gsub("W_bmi", "W_mbmi", analysis_nodes$W[[1]])
+  analysis_nodes$strata <- analysis$strata[[1]]
   analysis_params$nodes <- analysis_nodes
   analysis_params$data$uri <- paste0(analysis_params$data$uri, analysis$file)
+  analysis_params$script_params$parallelize <- TRUE
   return(analysis_params)
 }
+
+
+
+
+get_batch_results <- function (batch_id, results_folder = "results"){
+  
+  results_folder <- paste0("/data/KI/ki-manuscript-output/tmle/",results_folder)
+  
+  if (dir.exists(results_folder)) {
+    unlink(results_folder, recursive = TRUE)
+  }
+  dir.create(results_folder)
+  cat(sprintf("Downloading results...\n"))
+  job_statuses <- get_job_status(batch_id)
+  job_ids <- names(job_statuses)
+  finished_statuses <- c("success", "error")
+  viewable_job_ids <- job_ids[which(job_statuses %in% finished_statuses)]
+  pb <- progress_bar$new(format = "[:bar] :percent", total = length(viewable_job_ids), 
+                         clear = TRUE)
+  pb$tick(0)
+  for (job_id in viewable_job_ids) {
+    get_job_output(job_id, results_folder)
+    pb$tick()
+  }
+}
+
+load_batch_results <- function (results_file, results_folder = "results"){
+  
+  all_results_folders <- dir(results_folder, full.names = TRUE, 
+                             recursive = FALSE)
+  all_results_folders <- gsub("//","/",all_results_folders)
+  results_files <- file.path(all_results_folders, results_file)
+  one_results_file <- results_files[[1]]
+  all_results <- lapply(results_files, function(one_results_file) {
+    if (file.exists(one_results_file)) {
+      obj_names <- load(one_results_file)
+      return(get(obj_names[[1]]))
+    }
+    else {
+      warning("Expected results file ", one_results_file, 
+              " does not exist")
+      return(NULL)
+    }
+  })
+  results <- rbindlist(all_results, fill = TRUE)
+}
+
 
 #-----------------------------------------------------------------------------------------
 # Plotting functions
@@ -141,7 +246,7 @@ pool.cont <- function(d, method="REML"){
   #cat("Var: ", d$intervention_variable[1], " level: ",d$intervention_level[1] ," age: ", d$agecat[1] , "nstudies: ", nstudies$N, "\n")
   
   if(d$intervention_level[1] == d$baseline_level[1]){
-    est <- data.frame(ATE=0, CI1=0, CI2=0, Nstudies= nstudies$N)
+    est <- data.frame(ATE=0, CI1=0, CI2=0, Nstudies= nstudies$N, QE=NA, tau2=NA, I2=NA)
   }else{
     
     fit<-NULL
@@ -151,8 +256,8 @@ pool.cont <- function(d, method="REML"){
       if(is.null(fit)){try(fit<-rma(yi=untransformed_estimate, sei=untransformed_se, data=d, method="DL", measure="GEN"))}
       if(is.null(fit)){try(fit<-rma(yi=untransformed_estimate, sei=untransformed_se, data=d, method="HE", measure="GEN"))}
     }
-    est<-data.frame(fit$b, fit$ci.lb, fit$ci.ub)
-    colnames(est)<-c("ATE","CI1","CI2")
+    est<-data.frame(fit$b, fit$ci.lb, fit$ci.ub,fit$QE,fit$tau2,fit$I2)
+    colnames(est)<-c("ATE","CI1","CI2","Qstat", "tau2", "I2")
     est$Nstudies <- nstudies$N
   }
   rownames(est) <- NULL
@@ -193,33 +298,40 @@ RMA_clean <- function(RMAest, outcome="binary",
   RMAest$baseline_level[RMAest$baseline_level=="1" & RMAest$intervention_variable %in% binvars] <- "Yes"
   
   #Att birthweight grams
-  RMAest$intervention_level[RMAest$intervention_level=="Low birth weight"] <- "< 2500 g"
+  RMAest$intervention_level[RMAest$intervention_level=="Low birthweight"] <- "< 2500 g"
   RMAest$intervention_level[RMAest$intervention_level=="Normal or high birthweight"] <- ">= 2500 g"
-  RMAest$baseline_level[RMAest$baseline_level=="Low birth weight"] <- "< 2500 g"
+  RMAest$baseline_level[RMAest$baseline_level=="Low birthweight"] <- "< 2500 g"
   RMAest$baseline_level[RMAest$baseline_level=="Normal or high birthweight"] <- ">= 2500 g"
   
   unique(RMAest$intervention_level)
   RMAest$intervention_level <- gsub("Wealth ","",RMAest$intervention_level)
+  RMAest$intervention_level <- gsub("Wealth","",RMAest$intervention_level)
   RMAest$intervention_level <- factor(RMAest$intervention_level, 
                                       levels=c("0","1", "No", "Yes",
                                                "<48 cm" , "[48-50) cm",  ">=50 cm",                                  
                                                "< 2500 g",">= 2500 g", 
                                                "2","3","4","5","6","7","8","9",  "10" , "11","12" ,
                                                "<32" , "[32-38)", ">=38",
+                                               "<30" , "[30-35)", ">=35",
                                                "<20","[20-30)","<25","[25-30)",">=30",
-                                               "Low", "Medium", "High",                    
-                                               "<162 cm", "[162-167) cm" , ">=167 cm",
+                                               "Low", "Medium", "High",      
+                                               #"<162 cm", "[162-167) cm" , ">=167 cm",
+                                               "<162 cm",  ">=162 cm",
                                                "Preterm", "Early term", "Full or late term",           
                                                "Food Insecure", "Mildly Food Insecure", "Food Secure",               
                                                "Q1", "Q2", "Q3", "Q4",
-                                               "Underweight", "Normal weight", "Overweight or Obese",
-                                               "<151 cm", "[151-155) cm", ">=155 cm",
+                                               #"Underweight", "Normal weight", "Overweight or Obese",
+                                               "<20 kg/m²", ">=20 kg/m²",
+                                               #"<151 cm", "[151-155) cm", ">=155 cm",
+                                               "<150 cm",  ">=150 cm",
                                                "<52 kg", "[52-58) kg", ">=58 kg",
+                                               "<45 kg", ">=45 kg",
                                                "2+","3 or less","4-5","6-7","8+","3+","4+",                                                 
-                                               "0%","(0%, 5%]",">5%","Female","Male",
+                                               "[0%, 2%]",">2%","Female","Male",
                                                "Opposite max rain", "Pre-max rain","Max rain",
                                                "Post-max rain",
-                                               "WHZ Q1", "WHZ Q2", "WHZ Q3", "WHZ Q4"))
+                                               "WHZ Q1", "WHZ Q2", "WHZ Q3", "WHZ Q4",
+                                               "Not SGA","SGA"))
   
   
   
@@ -232,7 +344,7 @@ RMA_clean <- function(RMAest, outcome="binary",
                                                   "predfeed3","predfeed36","predfeed6",
                                                   "exclfeed3","exclfeed36","exclfeed6",
                                                   "perdiar6","perdiar24",
-                                                  "mage","fage","mhtcm","fhtcm",
+                                                  "mage","fage","fage_rf","mhtcm","fhtcm",
                                                   "mwtkg","mbmi","single",
                                                   "meducyrs","feducyrs",
                                                   "parity",
@@ -242,7 +354,7 @@ RMA_clean <- function(RMAest, outcome="binary",
                                                   "impfloor","cleanck",
                                                   "brthmon" ,"month",
                                                   "lag_WHZ_quart",
-                                                  "rain_quartile"))   
+                                                  "rain_quartile", "sga","SGA"))   
   
   
   #Add variable labels
@@ -264,6 +376,7 @@ RMA_clean <- function(RMAest, outcome="binary",
   RMAest$RFlabel[RMAest$intervention_variable=="nchldlt5"] <-   "# of children <5 in HH"
   RMAest$RFlabel[RMAest$intervention_variable=="hhwealth_quart"] <-  "HH wealth" 
   RMAest$RFlabel[RMAest$intervention_variable=="fage"] <- "Father's age" 
+  RMAest$RFlabel[RMAest$intervention_variable=="fage_rf"] <- "Father's age" 
   RMAest$RFlabel[RMAest$intervention_variable=="fhtcm"] <- "Father's height" 
   RMAest$RFlabel[RMAest$intervention_variable=="birthwt"] <- "Birthweight (kg)" 
   RMAest$RFlabel[RMAest$intervention_variable=="birthlen"] <- "Birth length (cm)" 
@@ -280,7 +393,7 @@ RMA_clean <- function(RMAest, outcome="binary",
   RMAest$RFlabel[RMAest$intervention_variable=="impsan"] <- "Improved sanitation" 
   RMAest$RFlabel[RMAest$intervention_variable=="safeh20"] <- "Safe water source" 
   RMAest$RFlabel[RMAest$intervention_variable=="perdiar6"] <- "Diarrhea <6 mo. (% days)" 
-  RMAest$RFlabel[RMAest$intervention_variable=="perdiar24"] <- "Diarrhea <24 mo.  (% days" 
+  RMAest$RFlabel[RMAest$intervention_variable=="perdiar24"] <- "Diarrhea <24 mo.  (% days)" 
   RMAest$RFlabel[RMAest$intervention_variable=="earlybf"] <- "Breastfed hour after birth" 
   RMAest$RFlabel[RMAest$intervention_variable=="predfeed3"] <-  "Predominant breastfeeding under 3 mo."
   RMAest$RFlabel[RMAest$intervention_variable=="predfeed36"] <-  "Predominant breastfeeding from 3-6 mo."
@@ -292,6 +405,8 @@ RMA_clean <- function(RMAest, outcome="binary",
   RMAest$RFlabel[RMAest$intervention_variable=="brthmon"] <-  "Birth month"
   RMAest$RFlabel[RMAest$intervention_variable=="lag_WHZ_quart"] <-  "Prior WLZ"
   RMAest$RFlabel[RMAest$intervention_variable=="rain_quartile"] <-  "Rain quartile"
+  RMAest$RFlabel[RMAest$intervention_variable=="SGA"] <-  "Small-for-gestational age"
+  RMAest$RFlabel[RMAest$intervention_variable=="sga"] <-  "Small-for-gestational age"
   
   
   
@@ -300,7 +415,10 @@ RMA_clean <- function(RMAest, outcome="binary",
   
   RMAest$RFtype <- NA
   RMAest$RFtype[RMAest$intervention_variable=="sex"] <-  "Birth characteristics"
-  RMAest$RFtype[RMAest$intervention_variable=="enwast"] <-  "Wasting" 
+  RMAest$RFtype[RMAest$intervention_variable=="SGA"] <-  "Birth characteristics"
+  RMAest$RFtype[RMAest$intervention_variable=="sga"] <-  "Birth characteristics"
+  RMAest$RFtype[RMAest$intervention_variable=="enwast"] <-  "Postnatal child health" 
+  RMAest$RFtype[RMAest$intervention_variable=="enstunt"] <-  "Postnatal child health" 
   RMAest$RFtype[RMAest$intervention_variable=="gagebrth"] <-  "Birth characteristics"
   RMAest$RFtype[RMAest$intervention_variable=="predexfd6"] <-  "Breastfeeding"
   RMAest$RFtype[RMAest$intervention_variable=="mage"] <- "Parent background" 
@@ -312,6 +430,7 @@ RMA_clean <- function(RMAest, outcome="binary",
   RMAest$RFtype[RMAest$intervention_variable=="nchldlt5"] <-   "Household"
   RMAest$RFtype[RMAest$intervention_variable=="hhwealth_quart"] <-  "SES" 
   RMAest$RFtype[RMAest$intervention_variable=="fage"] <- "Parent background" 
+  RMAest$RFtype[RMAest$intervention_variable=="fage_rf"] <- "Parent background" 
   RMAest$RFtype[RMAest$intervention_variable=="fhtcm"] <- "Parent anthro" 
   RMAest$RFtype[RMAest$intervention_variable=="birthwt"] <- "Birth characteristics"
   RMAest$RFtype[RMAest$intervention_variable=="birthlen"] <- "Birth characteristics"
@@ -344,6 +463,8 @@ RMA_clean <- function(RMAest, outcome="binary",
   RMAest$RFtype[RMAest$intervention_variable=="enwast"] <-  "Postnatal child health"
   RMAest$RFtype[RMAest$intervention_variable=="anywast06"] <-  "Postnatal child health"
   RMAest$RFtype[RMAest$intervention_variable=="pers_wast"] <-  "Postnatal child health"
+  
+  RMAest <- RMAest %>% droplevels()
   
   return(RMAest)
 }

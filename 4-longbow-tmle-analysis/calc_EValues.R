@@ -11,22 +11,10 @@ library(EValue)
 
 #Load data
 d <- readRDS(paste0(here::here(),"/results/rf results/pooled_RR_results.rds"))
-#d <- readRDS(paste0(here::here(),"/6-shiny-app/RF app/shiny_rf_results.rds"))
-#d <- d %>% filter(type=="RR")
 
 #Drop reference levels
 d <- d %>% filter(!(logRR.psi==1 & logSE==0 & RR==1)) %>% rename(estimate = RR, ci_lower = RR.CI1, ci_upper = RR.CI2)
-#d <- d %>% filter(intervention_level != baseline_level)
 
-
-#Keep significant estimates
-#d <- d %>% filter((ci_upper <1 & ci_lower <1) | (ci_upper >1 & ci_lower >1))
-
-#d <- d %>% filter(outcome_variable %in% c("ever_stunted",   "ever_wasted"))
-
-# head(d)
-# d<-d %>% filter(ci_upper<1)
-# d<-d[1,]
 
 evalues.RRvec <- function(d, pointest=T){
   vec<-NULL
@@ -69,17 +57,6 @@ summary(d$EVals_lb, na.rm=T)
 df <- d %>% filter(!is.na(EVals_lb))
 table(df$EVals_lb < df$EVals)
 
-#mean(d$RR[!(d$RR.CI1 <= 1  & d$RR.CI2 >= 1)])
-
-#d$EVals_lb[is.na(d$EVals_lb)] <- 1
-
-#Flip RR
-#d$estimate <- ifelse(d$estimate>1, d$estimate, 1/d$estimate )
-
-
-# d <- d %>% group_by(RFlabel) %>% mutate(medianEval_lb = median(EVals_lb, na.rm=T)) %>% ungroup() %>% arrange(-medianEval_lb) %>%
-#   mutate(RFlabel = factor(RFlabel, levels=unique(RFlabel)))
-# d <- d %>% filter(!is.na(RFlabel))
 
 df <- d 
 
@@ -106,22 +83,4 @@ p
 
 ggsave(p, file=paste0("C:/Users/andre/Documents/HBGDki/ki-longitudinal-manuscripts/figures/risk factor/fig-Evalues.png"), height=10, width=8)
 
-
-
-#Compare point estimates to the Evalues
-
-#Flip protective point estimates
-d <- df %>% filter(EVals_lb!=1)
-d$estimate[d$estimate < 1] <- 1/d$estimate[d$estimate < 1]
-summary(d$estimate)
-
-
-pRR <- ggplot(d, aes(x=estimate, y=EVals)) + geom_point(alpha=0.1) + 
-  scale_x_continuous(trans='log10') +
-  scale_y_continuous(trans='log10') 
-
-table(d$estimate > d$EVals)
-prop.table(table(d$estimate > d$EVals_lb))
-summary(d$EVals_lb/d$estimate)
-summary(d$EVals_lb)
 

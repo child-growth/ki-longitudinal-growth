@@ -9,7 +9,6 @@ shorten_descriptions<-function(dd){
   dd$short_description[dd$studyid=='AgaKhanUniv'] <- 'Aga Khan Nutr RCT'
   dd$short_description[dd$studyid=='SAS-FoodSuppl'] <- 'Food Suppl RCT'
   dd$short_description[dd$studyid=="MAL-ED"] <- 'MAL-ED'
-  dd$short_description[dd$studyid=='CMIN'] <- 'CMIN'
   dd$short_description[dd$studyid=='Guatemala BSC'] <- 'Bovine Serum RCT'
   dd$short_description[dd$studyid=='Peru Huascar'] <- 'Infant growth in Huascar'
   dd$short_description[dd$studyid=='EE'] <- 'Biomarkers for EE'
@@ -35,6 +34,9 @@ shorten_descriptions<-function(dd){
   dd$short_description[dd$studyid=='COHORTS' & dd$country=='GUATEMALA'] <- 'INCAP Nutr Supp RCT'
   dd$short_description[dd$studyid=='COHORTS' & dd$country=='INDIA'] <- 'New Delhi Birth Cohort'
   
+ 
+  dd$short_description[dd$studyid=='TDC'] <- 'Transmission Dyn. Crypto'
+  dd$short_description[is.na(dd$short_description)] <- dd$studyid[is.na(dd$short_description)]
   
   return(dd)
 }
@@ -45,116 +47,59 @@ shorten_descriptions<-function(dd){
 # measurements
 #-----------------------------------
 mark_measure_freq <- function(dd){
+  
+  monthly_vec <- c("MAL-ED",   
+                   "CMC-V-BCS-2002",              
+                   "IRC",    
+                   "TDC",
+                   "EE",           
+                   "ResPak",  
+                   "PROVIDE",  
+                   "TanzaniaChild2",           
+                   "Keneba",  
+                   "Guatemala BSC",       
+                   "GMS-Nepal",    
+                   "CMIN Peru89",                 
+                   "CMIN Peru95",                 
+                   "CMIN Bangladesh93",                 
+                   "CONTENT")
+  
+  quarterly_vec <- c("iLiNS-Zinc",  
+                     "JiVitA-3",          
+                     "JiVitA-4", 
+                     "LCNI-5",          
+                     "CMIN Brazil89",                 
+                     "CMIN GB94",                 
+                     "NIH-Birth",
+                     "NIH-Crypto",   
+                     "PROBIT",         
+                     "SAS-CompFeed",   
+                     "SAS-FoodSuppl",   
+                     "ZVITAMBO",   
+                     "COHORTS")
+  
+  yearly_vec <- c("WASH-Bangladesh",       
+                  "WASH-Kenya",  
+                  "iLiNS-DOSE",     
+                  "iLiNS-DYAD-M", 
+                  "iLiNS-DYAD-G",
+                  "AgaKhanUniv",           
+                  "Burkina Faso Zn",    
+                  "VITAMIN-A",  
+                  "Vitamin-B12",
+                  "Serrinha-VitA",   
+                  "EU",        
+                  "ZnMort")
+  
   dd$measurefreq <- NA
+  dd$measurefreq[dd$studyid %in% monthly_vec] <- "monthly"
+  dd$measurefreq[dd$studyid %in% quarterly_vec] <- "quarterly"
   
-  dd$measurefreq[dd$studyid %in% c(
-    "MAL-ED",   
-    "CMC-V-BCS-2002",              
-    "IRC",               
-    "EE",           
-    "ResPak",  
-    "PROVIDE",  
-    "TanzaniaChild2",           
-    "Keneba",  
-    "Guatemala BSC",       
-    "GMS-Nepal",             
-    "CONTENT"
-  )] <- "monthly"
+  dd$measurefreq[dd$studyid %in% yearly_vec] <- "yearly"
   
-  dd$measurefreq[dd$studyid %in% c(
-    "iLiNS-Zinc",  
-    "JiVitA-3",          
-    "JiVitA-4", 
-    "LCNI-5",          
-    "NIH-Birth",
-    "NIH-Crypto",   
-    "PROBIT",         
-    "SAS-CompFeed",   
-    "SAS-FoodSuppl",   
-    "ZVITAMBO",   
-    "CMIN",                 
-    "COHORTS"
-  )] <- "quarterly"
-  
-  dd$measurefreq[dd$studyid %in% c(
-    "WASH-Bangladesh",       
-    "WASH-Kenya",  
-    "iLiNS-DOSE",     
-    "iLiNS-DYAD-M", 
-    "iLiNS-DYAD-G",
-    "AgaKhanUniv",           
-    "Burkina Faso Zn",    
-    "VITAMIN-A",  
-    "Vitamin-B12",
-    "Serrinha-VitA",   
-    "EU",        
-    "ZnMort"
-  )] <- "yearly"
-  
-  
-  #Mark COHORTS and CMIN cohorts with different measurement frequency than quarterly
-  dd$measurefreq[dd$studyid=="CMIN" & dd$country=="BANGLADESH"] <- "monthly"
-  dd$measurefreq[dd$studyid=="CMIN" & dd$country=="PERU"] <- "monthly"
-  
-  
-  
-  #mark measure frequency of ID's with grant identifiers stripped:
-  dd$measurefreq[dd$studyid %in% c(
-    "MAL-ED", "MAL-ED",
-    "CMC-V-BCS-2002",              
-    "IRC",               
-    "EE",           
-    "ResPak",  
-    "PROVIDE", 
-    "TanzaniaChild2",           
-    "Keneba",  
-    "Guatemala BSC",       
-    "GMS-Nepal",             
-    "CONTENT"
-  )] <- "monthly"
-  
-  dd$measurefreq[dd$study_id=="MAL-ED"] <- "monthly"
-  dd$measurefreq[dd$study_id=="PROVIDE"] <- "monthly"
-  
-  dd$measurefreq[dd$studyid %in% c(
-    "iLiNS-Zinc",  
-    "JiVitA-3",          
-    "JiVitA-4", 
-    "LCNI-5",          
-    "NIH-Birth",
-    "NIH-Crypto",   
-    "PROBIT",         
-    "SAS-CompFeed",   
-    "SAS-FoodSuppl",   
-    "ZVITAMBO",   
-    "CMIN",                 
-    "COHORTS"
-  )] <- "quarterly"
-  
-  dd$measurefreq[dd$studyid %in% c(
-    "WASH-Bangladesh",       
-    "WASH-Kenya",  
-    "iLiNS-DOSE",     
-    "iLiNS-DYAD-M", 
-    "iLiNS-DYAD-G",
-    "AgaKhanUniv",           
-    "Burkina Faso Zn",    
-    "VITAMIN-A",  
-    "Vitamin-B12",
-    "Serrinha-VitA",   
-    "EU",        
-    "ZnMort"
-  )] <- "yearly"
-  
-  
-  #Mark COHORTS and CMIN cohorts with different measurement frequency than quarterly
-  dd$measurefreq[dd$studyid=="CMIN" & dd$country=="BANGLADESH"] <- "monthly"
-  dd$measurefreq[dd$studyid=="CMIN" & dd$country=="PERU"] <- "monthly"
   dd<- dd[!(dd$studyid=="COHORTS" & dd$country=="BRAZIL"),] #Drop because yearly but not an RCT
   dd<- dd[!(dd$studyid=="COHORTS" & dd$country=="SOUTH AFRICA"),] #Drop because yearly but not an RCT
   
-  
-
   
   dd$cohort <- paste0(dd$study_id," ", dd$countrycohort)
 
@@ -510,3 +455,49 @@ mark_region <- function(df){
   return(df)
 }
 
+# this version is used for stunting figures 
+# that show LAZ density and LAZ by age
+# pooled by ki cohort 
+mark_region2<-function(df){
+  
+  df$country <- as.character(df$country)
+  df <- df %>% mutate(country = toupper(country),
+                      region = case_when(
+                        country=="BANGLADESH" | country=="INDIA"|
+                          country=="NEPAL" | country=="PAKISTAN"|
+                          country=="PHILIPPINES"| country=="CHINA"|
+                          country=="THAILAND"|country=="SINGAPORE"|
+                          country=='OMAN'~ "South Asia",
+                        country=="KENYA"|
+                          country=="GHANA"|
+                          country=="BURKINA FASO"|
+                          country=="GUINEA-BISSAU"|
+                          country=="MALAWI"|
+                          country=="MALI"|
+                          country=="MOZAMBIQUE"|
+                          country=="SOUTH AFRICA"|
+                          country=="TANZANIA, UNITED REPUBLIC OF"|
+                          country=="TANZANIA"|
+                          country=="ZIMBABWE"|
+                          country=="GAMBIA"|
+                          country=="CONGO, THE DEMOCRATIC REPUBLIC OF" ~ "Africa",
+                        country=="BRAZIL" | country=="GUATEMALA" |
+                          country=="PERU"|country=='ECUADOR' | country=="MEXICO" |
+                          country=="BELIZE" ~ "Latin America",
+                        country=="UNITED STATES" | country=="UNITED KINGDOM" | country=="ITALY"|
+                          country== "NETHERLANDS"|
+                          country=="BELARUS" ~ "N.America & Europe",
+                        country=="KI POOLED" ~ region,
+                        TRUE ~ "Other"
+                      ))
+  
+  
+  df$region <- factor(df$region, 
+                      levels = c("Africa",
+                                 "South Asia",
+                                 "Latin America",
+                                 "N.America & Europe",
+                                 "Other"))
+  
+  return(df)
+}

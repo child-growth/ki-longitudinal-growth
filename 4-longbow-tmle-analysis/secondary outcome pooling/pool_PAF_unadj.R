@@ -7,7 +7,7 @@ source(paste0(here::here(), "/0-project-functions/0_risk_factor_functions.R"))
 
 
 #Load data
-dfull <- readRDS(paste0(here::here(),"/results/rf results/full_RF_unadj_results.rds"))
+dfull <- readRDS(paste0(BV_dir,"/results/rf results/full_RF_unadj_results.rds"))
 head(dfull)
 
 #Subset to primary outcomes
@@ -123,9 +123,6 @@ Prev_est_raw <- Prev_est_raw %>% subset(., select = - c(CI1, CI2, Nstudies, base
 dim(RMAest_raw)
 df <- left_join(RMAest_raw, Prev_est_raw, by = c("outcome_variable","intervention_variable", "agecat","region"))
 dim(df)
-
-
-#temp
 df <- df %>% filter(!is.na(prev))
 
 
@@ -152,4 +149,4 @@ RMAest_clean$RFlabel_ref <- paste0(RMAest_clean$RFlabel, ", ref: ", RMAest_clean
 
 
 # save pooled PAF's
-saveRDS(RMAest_clean, paste0(here::here(),"/results/rf results/pooled_PAF_results_unadj.rds"))
+saveRDS(RMAest_clean, paste0(BV_dir,"/results/rf results/pooled_PAF_results_unadj.rds"))

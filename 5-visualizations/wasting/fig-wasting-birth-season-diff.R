@@ -8,23 +8,18 @@ source(paste0(here::here(), "/0-project-functions/0_risk_factor_functions.R"))
 
 
 #Load longbow results
-results <- readRDS(here("results","rf results","raw longbow results","seasonality_birth_results_2020-05-29.RDS"))
-
-
+results <- readRDS(paste0(BV_dir,"/results/rf results/longbow results/seasonality_birth_results.RDS"))
+Ns <- readRDS(paste0(BV_dir,"/results/rf results/raw longbow results/seasonality_birth_results_obs_counts_2021-06-05.RDS")) %>%
+  rename(intervention_level=brthmon)
 
 d <- results %>% filter(type=="ATE")
+d <- left_join(d, Ns, by=c("studyid", "country", "intervention_level","outcome_variable"))
+table(d$n_cell)
+d <- d %>% filter(n_cell >=10, baseline_level=="1")
 
-#Subset to monthly cohorts by merging in N's
-#d <- left_join(cohort_Ns, d, by = c("studyid", "country"))
-table(d$studyid)
+d[d$intervention_level=="8",]
 
 
-#Get N's for figure caption
-# d %>% filter(intervention_level == baseline_level) %>% group_by(seasonality_category) %>% 
-#   summarize(totN=sum(N), minN=min(N), maxN=max(N),
-#             tot_nchild=sum(nchild), min_nchild=min(nchild), max_nchild=max(nchild))
-
-#d <- d %>% filter(studyid!="PROVIDE")
 
 
 
@@ -74,31 +69,17 @@ p_season_birth_diff <- ggplot(df, aes(y=ATE,x=intervention_level)) +
   ylab("WLZ difference") +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 5))  +
   scale_x_discrete(labels = c("Jan.","", "Mar.","",  "May","",  "Jul.","",  "Sep.","",  "Nov.", "")) +
-  # theme(
-  #   axis.text.x = element_text(margin =
-  #                                margin(t = 0, r = 0, b = 0, l = 0),
-  #                              size = 12 #, angle = 45, hjust = 1, vjust =1
-  #                              )) +
-  # theme(axis.title.y = element_text(size = 12))  
 theme(panel.background=element_blank(), 
-      # panel.grid.major=element_blank(), 
-      # panel.grid.minor=element_blank(), 
       panel.spacing = unit(c(0, 0, 0, 0), "cm"),       
-      #axis.ticks=element_blank(), 
-      #axis.text.x=element_blank(), 
-      #axis.text.y=element_blank(), 
       axis.title.x=element_blank(), 
-      #axis.title.y=element_blank(),
-      #plot.background = element_rect(fill = "transparent",colour = NA),
-      #plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"),  # Edited code
       legend.position = 'none') +
   labs(x=NULL)
+p_season_birth_diff
 
 
 
-
-saveRDS(p_season_birth_diff, file = here("/figures/plot-objects/season_birth_wlz_diff_plot.rds"))
-ggsave(p_season_birth_diff, file=paste0(here::here(),"/figures/wasting/season_birth_wlz_diff.png"), width=5, height=4)
+saveRDS(p_season_birth_diff, file = paste0(BV_dir,"/figures/plot-objects/season_birth_wlz_diff_plot.rds"))
+ggsave(p_season_birth_diff, file= paste0(BV_dir,"/figures/wasting/season_birth_wlz_diff.png"), width=5, height=4)
 
 
 
@@ -150,30 +131,24 @@ p_season_birth_diff_FE <- ggplot(df, aes(y=ATE,x=intervention_level)) +
   ylab("WLZ difference") +
   scale_y_continuous(breaks = scales::pretty_breaks(n = 5))  +
   scale_x_discrete(labels = c("Jan.","", "Mar.","",  "May","",  "Jul.","",  "Sep.","",  "Nov.", "")) +
-  # theme(
-  #   axis.text.x = element_text(margin =
-  #                                margin(t = 0, r = 0, b = 0, l = 0),
-  #                              size = 12 #, angle = 45, hjust = 1, vjust =1
-  #                              )) +
-  # theme(axis.title.y = element_text(size = 12))  
+ 
   theme(panel.background=element_blank(), 
-        # panel.grid.major=element_blank(), 
-        # panel.grid.minor=element_blank(), 
         panel.spacing = unit(c(0, 0, 0, 0), "cm"),       
-        #axis.ticks=element_blank(), 
-        #axis.text.x=element_blank(), 
-        #axis.text.y=element_blank(), 
         axis.title.x=element_blank(), 
-        #axis.title.y=element_blank(),
-        #plot.background = element_rect(fill = "transparent",colour = NA),
-        #plot.margin = unit(c(-1, -1.2, -1.2, -1.5), "cm"),  # Edited code
         legend.position = 'none') +
   labs(x=NULL)
 
 
 
 
-saveRDS(p_season_birth_diff_FE, file = here("/figures/plot-objects/season_birth_wlz_diff_plot_FE.rds"))
-ggsave(p_season_birth_diff_FE, file=paste0(here::here(),"/figures/wasting/season_birth_wlz_diff_FE.png"), width=5, height=4)
+saveRDS(p_season_birth_diff_FE, file = paste0(BV_dir,"/figures/plot-objects/season_birth_wlz_diff_plot_FE.rds"))
+ggsave(p_season_birth_diff_FE, file=paste0(BV_dir,"/figures/wasting/season_birth_wlz_diff_FE.png"), width=5, height=4)
+
+
+#Get I2 median/IQR
+df %>% 
+  summarise(quantile = c("Median","Q1", "Q3"),
+            I2 = quantile(I2, c(0.5, 0.25, 0.75), na.rm=TRUE)) %>%
+  spread(quantile, I2) 
 
 

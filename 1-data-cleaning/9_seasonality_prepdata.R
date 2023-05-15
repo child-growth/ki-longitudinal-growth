@@ -14,19 +14,20 @@ source(paste0(here::here(), "/0-config.R"))
 #--------------------------------------------
 
 d <- readRDS(paste0(ghapdata_dir, "ki-manuscript-dataset.rds"))
+assert_that(all(monthly_cohorts %in% unique(d$studyid)))
 
 #--------------------------------------------
 # Subset to  just identifying, Z-score data, and time data
 #--------------------------------------------
 
 
-d<-d %>% subset(., select=c(studyid, subjid, id, country, region, agedays, sex, measurefreq, month, whz, haz, waz, latitude, longitud, brthweek, brthmon))
+d <- d %>% subset(., select=c(studyid, subjid, id, country, region, agedays, sex, measurefreq, month, whz, haz, waz, latitude, longitud, brthweek, brthmon, brthyr))
 
 
-#d <- d %>% filter(studyid == "PROVIDE")
 
 #Fill in birth week as middle of the month from birthmonth from PROVIDE datasets
 d$brthweek[d$studyid=="PROVIDE"] <- round(as.numeric(d$brthmon[d$studyid=="PROVIDE"])  * 4.3333 ) -2 
+d$brthyr[d$studyid=="PROVIDE" & is.na(d$brthyr)] <- 2011
 
 
 table(d$studyid, is.na(d$brthweek))
@@ -54,10 +55,29 @@ d$jday <- round(((d$birthday + d$agedays)/364)%%1 * 364, 0)
 summary(d$jday)
 table(is.na(d$month))
 
+#calculate year of measurement
+d$year <- d$brthyr + floor(d$jday/364)
+table(d$year)
+table(d$studyid, d$year)
+round(prop.table(table(d$year, d$month),1),2)
+
 #RF dataset (with ages up to 25 months for 24 month mean WLZ)
 saveRDS(d, paste0(ghapdata_dir,"seasonality_rf_data.rds"))
 
 d <- d %>% filter(agedays < 24 * 30.4167)
 
 saveRDS(d, seasonality_data_path)
+
+
+#Make GPS location dataset
+
+#drop quarterly studies
+d <- d %>% filter(measurefreq=="monthly")
+unique(d$studyid)
+
+gps <- d %>% mutate(year=floor(brthyr + (birthday + agedays)/365)) %>%
+  distinct(studyid,country, month, year, latitude, longitud) %>% arrange(studyid,country, year,month)
+dim(gps)
+
+saveRDS(gps, paste0(ghapdata_dir,"ki_cohort_gps_data.rds"))
 

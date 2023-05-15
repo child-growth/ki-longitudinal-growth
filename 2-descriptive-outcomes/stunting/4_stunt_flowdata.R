@@ -21,12 +21,14 @@ d = d %>% ungroup() %>% mutate(studyid = as.character(studyid))
 d <- d %>% filter(measurefreq=="monthly")
 
 # drop variables we don't need
-d = d %>% select(studyid, subjid, region, country, measid, agedays, haz)
+d = d %>% select(studyid, subjid, region, country, measid, agedays, haz) 
 
-# # create reverse measid
-# d = d %>% 
-#   group_by(studyid, country, subjid) %>%
-#   mutate(revmeasid = rev(seq_along(agedays)))
+#-------------------------------------------
+# check included cohorts
+#-------------------------------------------
+assert_that(setequal(unique(d$studyid), monthly_cohorts),
+            msg = "Check data. Included cohorts do not match.")
+
 
 ##########################################
 # Define indicators of stunting at each time point
@@ -48,7 +50,6 @@ d <- d %>%
 d %>% group_by(agecat) %>%
   summarise(min = min(agedays)/30.4167,
             max = max(agedays)/30.4167)
-
 
 #--------------------------------------------------
 # classify stunting status each month
@@ -104,7 +105,15 @@ flow_m = d %>%
   # recode still stunted at first measurement  
   mutate(still_stunted = ifelse(measid==1, 0, still_stunted))
 
-
+# since some cohorts started measurement after birth,
+# if first measurement is stunted, do not classify 
+# as newly stunted; just replace as NA
+flow_m = flow_m %>% 
+  group_by(region,  studyid, country, subjid) %>% 
+  mutate(newly_stunted = ifelse(haz < -2 & measid==1 & 
+                                  studyid=="Guatemala BSC", NA, newly_stunted))
+  
+  
 # drop measurements with ages over 24 months
 #flow_m = flow_m %>% filter(!is.na(agecat)) 
 flow_m = flow_m %>% filter(agem < 25) 
@@ -117,15 +126,15 @@ d %>% filter(agedays<=16 * 30.4167) %>% ungroup() %>%
   summarize(Nchild=length(unique(paste0(studyid, subjid))))
 
 
-#--------------------------------------------------
-# check that indicators do not contain missing values
-#--------------------------------------------------
-assert_that(names(table(is.na(flow_m$newly_stunted)))=="FALSE")
-assert_that(names(table(is.na(flow_m$recover)))=="FALSE")
-assert_that(names(table(is.na(flow_m$relapse)))=="FALSE")
-assert_that(names(table(is.na(flow_m$still_stunted)))=="FALSE")
-assert_that(names(table(is.na(flow_m$not_stunted)))=="FALSE")
-assert_that(names(table(is.na(flow_m$never_stunted)))=="FALSE")
+# #--------------------------------------------------
+# # check that indicators do not contain missing values
+# #--------------------------------------------------
+# assert_that(names(table(is.na(flow_m$newly_stunted)))=="FALSE")
+# assert_that(names(table(is.na(flow_m$recover)))=="FALSE")
+# assert_that(names(table(is.na(flow_m$relapse)))=="FALSE")
+# assert_that(names(table(is.na(flow_m$still_stunted)))=="FALSE")
+# assert_that(names(table(is.na(flow_m$not_stunted)))=="FALSE")
+# assert_that(names(table(is.na(flow_m$never_stunted)))=="FALSE")
 
 # check for multiple categories
 flow_m = flow_m %>% mutate(sum = newly_stunted + 
@@ -164,14 +173,15 @@ stunt_agg = flow_m %>%
   group_by(studyid, country, agem) %>%
   summarise(
     nchild=length(unique(subjid)),
-    newly_stunted = sum(newly_stunted),
-    still_stunted = sum(still_stunted),
-    recover = sum(recover),
-    not_stunted = sum(not_stunted),
-    never_stunted = sum(never_stunted),
-    relapse = sum(relapse))  
+    newly_stunted = sum(newly_stunted, na.rm=T),
+    still_stunted = sum(still_stunted, na.rm=T),
+    recover = sum(recover, na.rm=T),
+    not_stunted = sum(not_stunted, na.rm=T),
+    never_stunted = sum(never_stunted, na.rm=T),
+    relapse = sum(relapse, na.rm=T))  
 
 #--------------------------------------------------
+# pool across all cohorts
 # estimate random effects, format results
 #--------------------------------------------------
 pooled_newly = run_rma_agem(data = stunt_agg, 
@@ -219,6 +229,55 @@ stunt_pooled = bind_rows(pooled_newly,
 )
 
 #--------------------------------------------------
+# pool by region
+# estimate random effects, format results
+#--------------------------------------------------
+pooled_newly_region = run_rma_agem_region(data = stunt_agg, 
+                                          n_name = "nchild", 
+                                          x_name = "newly_stunted", 
+                                          label = "Newly stunted",
+                                          method = "REML")
+
+pooled_still_region = run_rma_agem_region(data = stunt_agg, 
+                            n_name = "nchild", 
+                            x_name = "still_stunted", 
+                            label = "Still stunted",
+                            method = "REML")
+
+pooled_not_region = run_rma_agem_region(data = stunt_agg, 
+                          n_name = "nchild", 
+                          x_name = "not_stunted", 
+                          label = "Not stunted",
+                          method = "REML")
+
+pooled_rec_region = run_rma_agem_region(data = stunt_agg, 
+                          n_name = "nchild", 
+                          x_name = "recover",
+                          label = "Recovered",
+                          method = "REML")
+
+pooled_relapse_region = run_rma_agem_region(data = stunt_agg, 
+                              n_name = "nchild", 
+                              x_name = "relapse",
+                              label = "Stunting relapse",
+                              method = "REML")
+
+pooled_never_region = run_rma_agem_region(data = stunt_agg, 
+                            n_name = "nchild", 
+                            x_name = "never_stunted",
+                            label = "Never stunted",
+                            method = "REML")
+
+stunt_pooled_region = bind_rows(pooled_newly_region, 
+                         pooled_still_region,
+                         pooled_rec_region,
+                         pooled_relapse_region,
+                         pooled_not_region,
+                         pooled_never_region
+)
+
+#--------------------------------------------------
+# pool across all cohorts
 # estimate fixed effects, format results
 #--------------------------------------------------
 pooled_newly_fe = run_rma_agem(data = stunt_agg, 
@@ -266,6 +325,55 @@ stunt_pooled_fe = bind_rows(pooled_newly_fe,
 )
 
 
+#--------------------------------------------------
+# pool by region
+# estimate fixed effects, format results
+#--------------------------------------------------
+pooled_newly_region_fe = run_rma_agem_region(data = stunt_agg, 
+                                          n_name = "nchild", 
+                                          x_name = "newly_stunted", 
+                                          label = "Newly stunted",
+                                          method = "FE")
+
+pooled_still_region_fe = run_rma_agem_region(data = stunt_agg, 
+                                          n_name = "nchild", 
+                                          x_name = "still_stunted", 
+                                          label = "Still stunted",
+                                          method = "FE")
+
+pooled_not_region_fe = run_rma_agem_region(data = stunt_agg, 
+                                        n_name = "nchild", 
+                                        x_name = "not_stunted", 
+                                        label = "Not stunted",
+                                        method = "FE")
+
+pooled_rec_region_fe = run_rma_agem_region(data = stunt_agg, 
+                                        n_name = "nchild", 
+                                        x_name = "recover",
+                                        label = "Recovered",
+                                        method = "FE")
+
+pooled_relapse_region_fe = run_rma_agem_region(data = stunt_agg, 
+                                            n_name = "nchild", 
+                                            x_name = "relapse",
+                                            label = "Stunting relapse",
+                                            method = "FE")
+
+pooled_never_region_fe = run_rma_agem_region(data = stunt_agg, 
+                                          n_name = "nchild", 
+                                          x_name = "never_stunted",
+                                          label = "Never stunted",
+                                          method = "FE")
+
+stunt_pooled_region_fe = bind_rows(pooled_newly_region_fe, 
+                                pooled_still_region_fe,
+                                pooled_rec_region_fe,
+                                pooled_relapse_region_fe,
+                                pooled_not_region_fe,
+                                pooled_never_region_fe
+)
+
+
 #----------------------------------------------
 # setting estimates to 0 at birth for
 # still, previously, relapse stunted
@@ -295,6 +403,7 @@ replace_zero = function(data, age_list, label){
   return(data)
 }
 
+# overall pooling, random effects
 stunt_pooled_corr = replace_zero(data = stunt_pooled,
                                  age_list = newly_0,
                                  label = "Newly stunted")
@@ -319,6 +428,32 @@ stunt_pooled_corr = replace_zero(data = stunt_pooled_corr,
                                  age_list = never_0,
                                  label = "Never stunted")
 
+# region pooling, random effects
+stunt_pooled_region_corr = replace_zero(data = stunt_pooled_region,
+                                 age_list = newly_0,
+                                 label = "Newly stunted")
+
+stunt_pooled_region_corr = replace_zero(data = stunt_pooled_region_corr,
+                                 age_list = still_0,
+                                 label = "Still stunted")
+
+stunt_pooled_region_corr = replace_zero(data = stunt_pooled_region_corr,
+                                 age_list = not_0,
+                                 label = "Not stunted")
+
+stunt_pooled_region_corr = replace_zero(data = stunt_pooled_region_corr,
+                                 age_list = rec_0,
+                                 label = "Recovered")
+
+stunt_pooled_region_corr = replace_zero(data = stunt_pooled_region_corr,
+                                 age_list = relapse_0,
+                                 label = "Stunting relapse")
+
+stunt_pooled_region_corr = replace_zero(data = stunt_pooled_region_corr,
+                                 age_list = never_0,
+                                 label = "Never stunted")
+
+# overall pooling, fixed effects
 stunt_pooled_corr_fe = replace_zero(data = stunt_pooled_fe,
                                     age_list = newly_0,
                                     label = "Newly stunted")
@@ -343,9 +478,69 @@ stunt_pooled_corr_fe = replace_zero(data = stunt_pooled_corr_fe,
                                     age_list = never_0,
                                     label = "Never stunted")
 
+# region pooling, fixed effects
+stunt_pooled_region_corr_fe = replace_zero(data = stunt_pooled_region_fe,
+                                    age_list = newly_0,
+                                    label = "Newly stunted")
 
-saveRDS(flow_m, file=paste0(res_dir, "stuntflow.RDS"))
-saveRDS(stunt_pooled_corr, file=paste0(res_dir, "stuntflow_pooled.RDS"))
-saveRDS(stunt_pooled_corr_fe, file=paste0(res_dir, "stuntflow_pooled_fe.RDS"))
+stunt_pooled_region_corr_fe = replace_zero(data = stunt_pooled_region_corr_fe,
+                                    age_list = still_0,
+                                    label = "Still stunted")
+
+stunt_pooled_region_corr_fe = replace_zero(data = stunt_pooled_region_corr_fe,
+                                    age_list = not_0,
+                                    label = "Not stunted")
+
+stunt_pooled_region_corr_fe = replace_zero(data = stunt_pooled_region_corr_fe,
+                                    age_list = rec_0,
+                                    label = "Recovered")
+
+stunt_pooled_region_corr_fe = replace_zero(data = stunt_pooled_region_corr_fe,
+                                    age_list = relapse_0,
+                                    label = "Stunting relapse")
+
+stunt_pooled_region_corr_fe = replace_zero(data = stunt_pooled_region_corr_fe,
+                                    age_list = never_0,
+                                    label = "Never stunted")
+
+
+saveRDS(flow_m, file=paste0(res_dir, "stunting/stuntflow.RDS"))
+saveRDS(stunt_pooled_corr, file=paste0(res_dir, "stunting/stuntflow_pooled_reml.RDS"))
+saveRDS(stunt_pooled_corr_fe, file=paste0(res_dir, "stunting/stuntflow_pooled_fe.RDS"))
+saveRDS(stunt_pooled_region_corr, file=paste0(res_dir, "stunting/stuntflow_pooled_region_reml.RDS"))
+saveRDS(stunt_pooled_region_corr_fe, file=paste0(res_dir, "stunting/stuntflow_pooled_region_fe.RDS"))
+
+
+#Get I2 for plot legend by merging in both overall and birth strat data sources
+stunt_pooled_corr = readRDS(file=paste0(res_dir, "stunting/stuntflow_pooled_reml.RDS"))
+birthlaz_data = readRDS(paste0(res_dir, "stunting/stuntflow_pooled_birthlaz_reml.RDS"))
+df <- bind_rows(stunt_pooled_corr, birthlaz_data)
+table(df$label)
+
+#Get I2 median/IQR
+df <- df %>% mutate(agem=as.numeric(as.character(agem))) %>%
+  filter(agem<=15) %>% 
+  filter(label %in% c("Newly stunted","Stunting relapse","Recovered"))
+
+# drop rows that pooled over age not in underlying cohort data
+nrow(df)
+df = df[-which(df$agem<2 & df$label=="Stunting relapse"),]
+df = df[-which(df$agem<1 & df$label=="Recovered"),]
+nrow(df)
+
+# drop newly stunted if age <2 months
+# these are an artifact of how age was coded
+# within stunting categories
+nrow(df)
+df = df[-which(df$birth_laz=="LAZ under -2" & df$label=="Newly stunted"),]
+nrow(df)
+
+df %>% filter(as.numeric(as.character(agem))<=15) %>%
+  summarise(quantile = c("Median","Q1", "Q3"),
+            I2 = quantile(I2, c(0.5, 0.25, 0.75), na.rm=TRUE)) %>%
+  spread(quantile, I2) 
+
+
+
 
 

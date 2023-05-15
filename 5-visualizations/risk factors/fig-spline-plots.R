@@ -11,8 +11,12 @@ d <- d %>% subset(., select=-c(tr))
 
 
 #merge WLZ outcomes with covariates
-cov<-readRDS("/home/andrew.mertens/data/KI/UCB-SuperLearner/Manuscript analysis data/FINAL_clean_covariates.rds")
+cov<-readRDS(clean_covariates_path)
 
+table(cov$mhtcm3)
+table(cov$mbmi3)
+
+cov <- cov %>% subset(., select=-c(mbmi, mhtcm)) %>% rename(mhtcm=mhtcm3, mbmi=mbmi3, )
 
 cov <- cov %>% subset(., select=-c( region, month, W_gagebrth,    W_birthwt,     W_birthlen,   
                                     W_mage,        W_mhtcm,       W_mwtkg,       W_mbmi,        W_fage,        W_fhtcm,       W_meducyrs,    W_feducyrs,   
@@ -35,7 +39,7 @@ d %>% ungroup() %>%  filter(!is.na(mbmi)) %>% summarize(N=n(), Nchild=length(uni
 #Adapted from: 
 #http://www.ag-myresearch.com/2012_gasparrini_statmed.html
 
-spline_meta <- function(d, Y="haz", Avar, overall=F, cen=365, type="ps", mean_aic=F){
+spline_meta <- function(d, Y="haz", Avar, overall=F, cen=365, type="ps", mean_aic=F, forcedf=NULL){
   
   # LOAD THE PACKAGES (mvmeta PACKAGE IS ASSUMED TO BE INSTALLED)
   require(mvmeta)
@@ -56,7 +60,7 @@ spline_meta <- function(d, Y="haz", Avar, overall=F, cen=365, type="ps", mean_ai
   d <- droplevels(d)
   
   # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-  # NOTE: set bound as average bound across studies and knots based on average quantiles, (same as example script, may need to save studies as a list first)
+  # NOTE: set bound as average bound across studies and knots based on average quantiles, (same as example script)
   # if that fails, set splines specific to each study
   # XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
   
@@ -93,7 +97,8 @@ spline_meta <- function(d, Y="haz", Avar, overall=F, cen=365, type="ps", mean_ai
   }
     
   bestdf <- bestdf$df
-    bestdf
+    
+    if(!is.null(forcedf)){bestdf<-forcedf}
   
   for(i in 1:m){
     
@@ -255,48 +260,9 @@ return(res)
 
 }
 
-#------------------------------------------------------------------------------------------------
-# WLZ- maternal weight
-#------------------------------------------------------------------------------------------------
-
-predlist1 <- spline_meta(d[d$mwtkg==">=58 kg",], Y="whz", Avar="mwtkg", overall=T, cen=365)
-plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel=">=58 kg")
-predlist2 <- spline_meta(d[d$mwtkg=="<52 kg",], Y="whz", Avar="mwtkg", overall=T, cen=365)
-plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="<52 kg")
-predlist3 <- spline_meta(d[d$mwtkg=="[52-58) kg",], Y="whz", Avar="mwtkg", overall=T, cen=365)
-plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel="[52-58) kg")
-plotdf_wlz_mwtkg <- rbind(plotdf1,plotdf2,plotdf3)
-
-offsetZ_wlz_mwtkg <- offset_fun(d, Y="whz", Avar="mwtkg", cen=365)
-
-
-plotdf_wlz_mwtkg <- left_join(plotdf_wlz_mwtkg, offsetZ_wlz_mwtkg, by="level")
-plotdf_wlz_mwtkg <- plotdf_wlz_mwtkg %>% 
-  mutate(est= est + offset,
-         ci.lb= ci.lb + offset,
-         ci.ub= ci.ub + offset)
-
-plotdf_wlz_mwtkg <- plotdf_wlz_mwtkg %>% mutate(level = factor(level, levels=c( ">=58 kg", "[52-58) kg", "<52 kg")))
-  
-
-Avarwt="Maternal weight"
-
+orange_color_gradient = c("#FF7F0E", "#ffb26e", "#f5caab")
+blue_color_gradient = c("#1F77B4", "#85cdff", "#b8e7ff")
 purple_color_gradient = c("#7644ff", "#b3adff", "#e4dbff")
-  
-p1 <- ggplot() +
-  geom_line(data=plotdf_wlz_mwtkg, aes(x=agedays, y=est, group=level, color=level), size=1.25) +
-  #geom_ribbon(data=plotdf_wlz_mwtkg, aes(x=agedays,ymin=ci.lb, ymax=ci.ub, group=level, color=level,  fill=level), alpha=0.3, color=NA) +
-  scale_color_manual(values=purple_color_gradient, name = paste0( Avarwt)) +
-  scale_fill_manual(values=purple_color_gradient, name = paste0( Avarwt)) +
-  scale_x_continuous(limits=c(1,730), expand = c(0, 0),
-                     breaks = 0:12*30.41*2, labels = 0:12*2) +
-  scale_y_continuous(limits=c(-1.2, 0.4), breaks = seq(-1.2, 0.4, 0.2), labels = seq(-1.2, 0.4, 0.2)) + 
-  xlab("Child age in months") + ylab("Mean WLZ") +
-  #coord_cartesian(ylim=c(-2,1)) +
-  ggtitle(paste0("Spline curves of WLZ, stratified by\nlevels of ", Avarwt)) +
-  theme(legend.position = c(0.8,0.9))
-
-print(p1)
 
 
 
@@ -308,12 +274,12 @@ print(p1)
 predlist1 <- predlist2 <- predlist3 <- NULL
 
 table(d$mhtcm)
-predlist1 <- spline_meta(d[d$mhtcm==">=155 cm",], Y="whz", Avar="mhtcm", overall=T, mean_aic = T)
+predlist1 <- spline_meta(d[d$mhtcm==">=155 cm",], Y="whz", Avar="mhtcm", overall=T, forcedf=5)
 plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel=">=155 cm")
-predlist2 <- spline_meta(d[d$mhtcm=="<151 cm",], Y="whz", Avar="mhtcm", overall=T, mean_aic = T)
-plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="<151 cm")
-predlist3 <- spline_meta(d[d$mhtcm=="[151-155) cm",], Y="whz", Avar="mhtcm", overall=T, mean_aic = T)
-plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel="[151-155) cm")
+predlist2 <- spline_meta(d[d$mhtcm=="[150-155) cm",], Y="whz", Avar="mhtcm", overall=T, mean_aic = T)
+plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="[150-155) cm")
+predlist3 <- spline_meta(d[d$mhtcm=="<150 cm",], Y="whz", Avar="mhtcm", overall=T)
+plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel="<150 cm")
 plotdf_wlz_mhtcm <- rbind(plotdf1,plotdf2,plotdf3)
 
 offsetZ_wlz_mhtcm <- offset_fun(d, Y="whz", Avar="mhtcm")
@@ -325,7 +291,7 @@ plotdf_wlz_mhtcm <- plotdf_wlz_mhtcm %>%
          ci.lb= ci.lb + offset,
          ci.ub= ci.ub + offset)
 
-plotdf_wlz_mhtcm <- plotdf_wlz_mhtcm %>% mutate(level = factor(level, levels=c( ">=155 cm", "[151-155) cm", "<151 cm")))
+plotdf_wlz_mhtcm <- plotdf_wlz_mhtcm %>% mutate(level = factor(level, levels=c( ">=155 cm", "[150-155) cm", "<150 cm")))
 
 Avar="Maternal height"
 
@@ -334,11 +300,11 @@ light_blue_color_gradient = c("#0fb3bf", "#83ced3", "#c5e0e2")
 p2 <- ggplot() + 
   geom_line(data=plotdf_wlz_mhtcm, aes(x=agedays, y=est, group=level, color=level), size=1.25) +
   #geom_ribbon(data=plotdf_wlz_mhtcm, aes(x=agedays,ymin=ci.lb, ymax=ci.ub, group=level, color=level,  fill=level), alpha=0.3, color=NA) +
-  scale_color_manual(values=light_blue_color_gradient, name = paste0( Avar)) +
-  scale_fill_manual(values=light_blue_color_gradient, name = paste0( Avar)) +
+  scale_color_manual(values=orange_color_gradient, name = paste0( Avar)) +
+  scale_fill_manual(values=orange_color_gradient, name = paste0( Avar)) +
   scale_x_continuous(limits=c(1,730), expand = c(0, 0),
                      breaks = 0:12*30.41*2, labels = 0:12*2) +
-  scale_y_continuous(limits=c(-1.2, 0.4), breaks = seq(-1.2, 0.4, 0.2), labels = seq(-1.2, 0.4, 0.2)) + 
+  scale_y_continuous(limits=c(-1, 0.45), breaks = seq(-1.2, 0.4, 0.2), labels = seq(-1.2, 0.4, 0.2)) + 
   xlab("Child age in months") + ylab("Mean WLZ") + 
   #coord_cartesian(ylim=c(-2,1)) +
   ggtitle(paste0("Spline curves of WLZ, stratified by\nlevels of ", Avar)) +
@@ -346,53 +312,6 @@ p2 <- ggplot() +
 print(p2)
 
 
-#------------------------------------------------------------------------------------------------
-# LAZ- maternal weight
-#------------------------------------------------------------------------------------------------
-
-df <- d %>% filter(!is.na(mwtkg)) %>% filter(agedays < 24* 30.4167)
-dim(df)
-df %>% group_by(studyid, country, subjid) %>% slice(1) %>% ungroup() %>% summarize(n(), Nstudies=length(unique(paste0(studyid, country))))
-
-
-predlist1 <- predlist2 <- predlist3 <- NULL
-
-
-predlist1 <- spline_meta(d[d$mwtkg==">=58 kg",], Y="haz", Avar="mwtkg", overall=T)
-plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel=">=58 kg")
-predlist2 <- spline_meta(d[d$mwtkg=="<52 kg",], Y="haz", Avar="mwtkg", overall=T)
-plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="<52 kg")
-predlist3 <- spline_meta(d[d$mwtkg=="[52-58) kg",], Y="haz", Avar="mwtkg", overall=T)
-plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel="[52-58) kg")
-plotdf_laz_mwtkg <- rbind(plotdf1,plotdf2,plotdf3)
-
-offsetZ_laz_mwtkg <- offset_fun(d, Y="haz", Avar="mwtkg")
-
-
-plotdf_laz_mwtkg <- left_join(plotdf_laz_mwtkg, offsetZ_laz_mwtkg, by="level")
-plotdf_laz_mwtkg <- plotdf_laz_mwtkg %>% 
-  mutate(est= est + offset,
-         ci.lb= ci.lb + offset,
-         ci.ub= ci.ub + offset)
-
-plotdf_laz_mwtkg <- plotdf_laz_mwtkg %>% mutate(level = factor(level, levels=c( ">=58 kg", "[52-58) kg", "<52 kg")))
-
-
-Avarwt="Maternal weight"
-
-p3 <- ggplot() + 
-  geom_line(data=plotdf_laz_mwtkg, aes(x=agedays, y=est, group=level, color=level), size=1.25) +
-  #geom_ribbon(data=plotdf_laz_mwtkg, aes(x=agedays,ymin=ci.lb, ymax=ci.ub, group=level, color=level,  fill=level), alpha=0.3, color=NA) +
-  scale_color_manual(values=purple_color_gradient, name = paste0( Avarwt)) +
-  scale_fill_manual(values=purple_color_gradient, name = paste0( Avarwt)) +
-  scale_x_continuous(limits=c(1,730), expand = c(0, 0),
-                     breaks = 0:12*30.41*2, labels = 0:12*2) +
-  scale_y_continuous(limits=c(-2.4, -0.4), breaks = seq(-2.2, -0.4, 0.2), labels = seq(-2.2, -0.4, 0.2)) + 
-  xlab("Child age in months") + ylab("Mean LAZ") + 
-  #coord_cartesian(ylim=c(-2,1)) +
-  ggtitle(paste0("Spline curves of LAZ, stratified by\nlevels of ", Avarwt)) +
-  theme(legend.position = c(0.8,0.9))
-print(p3)
 
 
 #------------------------------------------------------------------------------------------------
@@ -406,13 +325,15 @@ df %>% group_by(studyid, country, subjid) %>% slice(1) %>% ungroup() %>% summari
 
 predlist1 <- predlist2 <- predlist3 <- NULL
 
-predlist1 <- spline_meta(d[d$mhtcm==">=155 cm",], Y="haz", Avar="mhtcm", overall=T, mean_aic=T)
+
+predlist1 <- spline_meta(d[d$mhtcm==">=155 cm",], Y="haz", Avar="mhtcm", overall=T, forcedf=5)
 plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel=">=155 cm")
-predlist2 <- spline_meta(d[d$mhtcm=="<151 cm",], Y="haz", Avar="mhtcm", overall=T)
-plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="<151 cm")
-predlist3 <- spline_meta(d[d$mhtcm=="[151-155) cm",], Y="haz", Avar="mhtcm", overall=T, mean_aic=T)#, forcedf=) #forced df due to fit issues
-plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel="[151-155) cm")
+predlist2 <- spline_meta(d[d$mhtcm=="[150-155) cm",], Y="haz", Avar="mhtcm", overall=T, mean_aic = T)
+plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="[150-155) cm")
+predlist3 <- spline_meta(d[d$mhtcm=="<150 cm",], Y="haz", Avar="mhtcm", overall=T)
+plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel="<150 cm")
 plotdf_laz_mhtcm <- rbind(plotdf1,plotdf2,plotdf3)
+
 
 offsetZ_laz_mhtcm <- offset_fun(d, Y="haz", Avar="mhtcm")
 
@@ -423,20 +344,18 @@ plotdf_laz_mhtcm <- plotdf_laz_mhtcm %>%
          ci.lb= ci.lb + offset,
          ci.ub= ci.ub + offset)
 
-plotdf_laz_mhtcm <- plotdf_laz_mhtcm %>% mutate(level = factor(level, levels=c( ">=155 cm", "[151-155) cm", "<151 cm")))
+plotdf_laz_mhtcm <- plotdf_laz_mhtcm %>% mutate(level = factor(level, levels=c( ">=155 cm", "[150-155) cm", "<150 cm")))
 
 Avar="Maternal height"
 
 p4 <- ggplot() + 
   geom_line(data=plotdf_laz_mhtcm, aes(x=agedays, y=est, group=level, color=level), size=1.25) +
-  #geom_ribbon(data=plotdf_laz_mhtcm, aes(x=agedays,ymin=ci.lb, ymax=ci.ub, group=level, color=level,  fill=level), alpha=0.3, color=NA) +
-  scale_color_manual(values =light_blue_color_gradient, name = paste0( Avar)) +
-  scale_fill_manual(values = light_blue_color_gradient, name = paste0( Avar)) +
+  scale_color_manual(values =blue_color_gradient, name = paste0( Avar)) +
+  scale_fill_manual(values = blue_color_gradient, name = paste0( Avar)) +
   scale_x_continuous(limits=c(1,730), expand = c(0, 0),
                      breaks = 0:12*30.41*2, labels = 0:12*2) +
-  scale_y_continuous(limits=c(-2.4, -0.4), breaks = seq(-2.2, -0.4, 0.2), labels = seq(-2.2, -0.4, 0.2)) + 
+  scale_y_continuous(limits=c(-2.35, -0.5), breaks = seq(-2.2, -0.4, 0.2), labels = seq(-2.2, -0.4, 0.2)) + 
   xlab("Child age in months") + ylab("Mean LAZ") + 
-  #coord_cartesian(ylim=c(-2,1)) +
   ggtitle(paste0("Spline curves of LAZ, stratified by\nlevels of ", Avar)) +
   theme(legend.position = c(0.8,0.9))
 print(p4)
@@ -454,12 +373,14 @@ print(p4)
 predlist1 <- predlist2 <- predlist3 <- NULL
 
 table(d$mbmi)
-predlist1 <- spline_meta(d[d$mbmi=="Normal weight",], Y="whz", Avar="mbmi", overall=T, cen=365)
-plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel="Normal weight")
-predlist2 <- spline_meta(d[d$mbmi=="Underweight",], Y="whz", Avar="mbmi", overall=T, cen=365)
-plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="Underweight")
+predlist1 <- spline_meta(d[d$mbmi=="<20 kg/m²",], Y="whz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
+plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel="<20 kg/m²")
+predlist2 <- spline_meta(d[d$mbmi=="[20-24) kg/m²",], Y="whz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
+plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="[20-24) kg/m²")
+predlist3 <- spline_meta(d[d$mbmi==">=24 kg/m²",], Y="whz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
+plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel=">=24 kg/m²")
 
-plotdf_wlz_mbmi <- rbind(plotdf1,plotdf2)
+plotdf_wlz_mbmi <- rbind(plotdf1, plotdf2, plotdf3)
 
 offsetZ_wlz_mbmi <- offset_fun(d, Y="whz", Avar="mbmi", cen=365)
 
@@ -470,18 +391,18 @@ plotdf_wlz_mbmi <- plotdf_wlz_mbmi %>%
          ci.lb= ci.lb + offset,
          ci.ub= ci.ub + offset)
 
-plotdf_wlz_mbmi <- plotdf_wlz_mbmi %>% mutate(level = factor(level, levels=c( "Normal weight", "Underweight")))
+plotdf_wlz_mbmi <- plotdf_wlz_mbmi %>% mutate(level = factor(level, levels=c( ">=24 kg/m²", "[20-24) kg/m²", "<20 kg/m²")))
 
 Avar="Maternal BMI"
-brown_color_gradient = c(tableau10[6], "#c99a6b")
 
 p5 <- ggplot() + 
   geom_line(data=plotdf_wlz_mbmi, aes(x=agedays, y=est, group=level, color=level), size=1.25) +
-  scale_color_manual(values=brown_color_gradient, name = paste0( Avar)) +
-  scale_fill_manual(values=brown_color_gradient, name = paste0( Avar)) +
+  scale_color_manual(values=orange_color_gradient, name = paste0( Avar), 
+                     labels = c( ">=24 kg/m²", "[20-24) kg/m²", "<20 kg/m²")) +
+  scale_fill_manual(values=orange_color_gradient, name = paste0( Avar)) +
   scale_x_continuous(limits=c(1,730), expand = c(0, 0),
                      breaks = 0:12*30.41*2, labels = 0:12*2) +
-  scale_y_continuous(limits=c(-1.2, 0.4), breaks = seq(-1.2, 0.4, 0.2), labels = seq(-1.2, 0.4, 0.2)) + 
+  scale_y_continuous(limits=c(-1, 0.45), breaks = seq(-1.2, 0.4, 0.2), labels = seq(-1.2, 0.4, 0.2)) + 
   xlab("Child age in months") + ylab("Mean WLZ") + 
   #coord_cartesian(ylim=c(-2,1)) +
   ggtitle(paste0("Spline curves of WLZ, stratified by\nlevels of ", Avar)) +
@@ -497,17 +418,18 @@ df <- d %>% filter(!is.na(mbmi))
 dim(df)
 df %>% group_by(studyid, country, subjid) %>% slice(1) %>% ungroup() %>% summarize(n(), Nstudies=length(unique(paste0(studyid, country))))
 
-#Normal weight   Underweight 
+predlist1 <- predlist2 <- predlist3 <- NULL
 
-predlist1 <- spline_meta(d[d$mbmi=="Normal weight",], Y="haz", Avar="mbmi", overall=T, cen=365)
-plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel="Normal weight")
-predlist2 <- spline_meta(d[d$mbmi=="Underweight",], Y="haz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
-plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="Underweight")
+predlist1 <- spline_meta(d[d$mbmi=="<20 kg/m²",], Y="haz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
+plotdf1 <- create_plotdf(predlist1, overall=T, stratlevel="<20 kg/m²")
+predlist2 <- spline_meta(d[d$mbmi=="[20-24) kg/m²",], Y="haz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
+plotdf2 <- create_plotdf(predlist2, overall=T, stratlevel="[20-24) kg/m²")
+predlist3 <- spline_meta(d[d$mbmi==">=24 kg/m²",], Y="haz", Avar="mbmi", overall=T, cen=365, mean_aic=T)
+plotdf3 <- create_plotdf(predlist3, overall=T, stratlevel=">=24 kg/m²")
 
-plotdf_laz_mbmi <- rbind(plotdf1,plotdf2)
+plotdf_laz_mbmi <- rbind(plotdf1, plotdf2, plotdf3)
 
 offsetZ_laz_mbmi <- offset_fun(d, Y="haz", Avar="mbmi", cen=365)
-
 
 plotdf_laz_mbmi <- left_join(plotdf_laz_mbmi, offsetZ_laz_mbmi, by="level")
 plotdf_laz_mbmi <- plotdf_laz_mbmi %>% 
@@ -515,7 +437,7 @@ plotdf_laz_mbmi <- plotdf_laz_mbmi %>%
          ci.lb= ci.lb + offset,
          ci.ub= ci.ub + offset)
 
-plotdf_laz_mbmi <- plotdf_laz_mbmi %>% mutate(level = factor(level, levels=c( "Normal weight", "Underweight")))
+plotdf_laz_mbmi <- plotdf_laz_mbmi %>% mutate(level = factor(level, levels=c( ">=24 kg/m²", "[20-24) kg/m²", "<20 kg/m²")))
 
 
 Avarwt="Maternal BMI"
@@ -523,11 +445,11 @@ Avarwt="Maternal BMI"
 
 p6 <- ggplot() +
   geom_line(data=plotdf_laz_mbmi, aes(x=agedays, y=est, group=level, color=level), size=1.25) +
-  scale_color_manual(values=brown_color_gradient, name = paste0( Avarwt)) +
-  scale_fill_manual(values=brown_color_gradient, name = paste0( Avarwt)) +
+  scale_color_manual(values=blue_color_gradient, name = paste0( Avarwt), labels = c( ">=24 kg/m²", "[20-24) kg/m²", "<20 kg/m²")) +
+  scale_fill_manual(values=blue_color_gradient, name = paste0( Avarwt)) +
   scale_x_continuous(limits=c(1,730), expand = c(0, 0),
                      breaks = 0:12*30.41*2, labels = 0:12*2) +
-  scale_y_continuous(limits=c(-2.4, -0.4), breaks = seq(-2.2, -0.4, 0.2), labels = seq(-2.2, -0.4, 0.2)) + 
+  scale_y_continuous(limits=c(-2.35, -0.5), breaks = seq(-2.2, -0.4, 0.2), labels = seq(-2.2, -0.4, 0.2)) + 
   xlab("Child age in months") + ylab("Mean LAZ") +
   #coord_cartesian(ylim=c(-2,1)) +
   ggtitle(paste0("Spline curves of LAZ, stratified by\nlevels of ", Avarwt)) +
@@ -538,40 +460,11 @@ print(p6)
 
 
 #Save plot objects
-saveRDS(list(p1, p2, p3, p4, p5, p6),  file=paste0(here(),"/figures/plot-objects/risk-factor/rf_spline_objects.RDS"))
+p1 <- p3 <- NULL
+saveRDS(list(p1, p2, p3, p4, p5, p6),  file=paste0(BV_dir,"/figures/plot-objects/risk-factor/rf_spline_objects.RDS"))
 
 #save plot data
+plotdf_wlz_mwtkg <- plotdf_laz_mwtkg <- NULL
 saveRDS(list(plotdf_wlz_mwtkg,plotdf_laz_mwtkg,plotdf_wlz_mhtcm,plotdf_laz_mhtcm,plotdf_wlz_mbmi,plotdf_laz_mbmi), 
-        file=paste0(here(),"/figures/risk-factor/figure-data/rf_spline_data.RDS"))
-
-#------------------------------------------------------------------------------------------------
-# Plot as a grid
-#------------------------------------------------------------------------------------------------
-
-pos = c(0.2,0.25)
-
-p1 <- p1 + ggtitle("Spline curves of WLZ, stratified by\ncategories of maternal weight") + theme(legend.position = pos,  legend.title=element_text(size=8), legend.text=element_text(size=6)) +  guides(color = guide_legend("Maternal\nweight", nrow=3)) +scale_y_continuous(limits=c(-1.2, 0.4), breaks = seq(-1.2, 0.4, 0.2), labels = round(seq(-1.2, 0.4, 0.2),1)) + scale_x_continuous(limits=c(0,730), expand = c(0, 0), breaks = 0:6*30.41*4, labels = c(0, seq(4, 24, 4)))
-p2 <- p2  + ggtitle("Stratified by\ncategories of maternal height") + theme(legend.position = pos,  legend.title=element_text(size=8), legend.text=element_text(size=6))+ scale_y_continuous(limits=c(-1.2, 0.4), breaks = seq(-1.2, 0.4, 0.2), labels = round(seq(-1.2, 0.4, 0.2),1)) + scale_x_continuous(limits=c(0,730), expand = c(0, 0), breaks = 0:6*30.41*4, labels = c(0, seq(4, 24, 4)))
-p3 <- p3  + ggtitle("Spline curves of LAZ, stratified by\ncategories of maternal weight") + theme(legend.position = "none") + scale_x_continuous(limits=c(0,730), expand = c(0, 0), breaks = 0:6*30.41*4, labels = c(0, seq(4, 24, 4))) + theme(legend.key = element_blank()) + theme(legend.key = element_blank()) +scale_y_continuous(limits=c(-2.4, -0.4), breaks = seq(-2.4, 0.4, 0.2), labels = round(seq(-2.4, 0.4, 0.2),1)) 
-p4 <- p4  + ggtitle("Stratified by\ncategories of maternal height") +  theme(legend.position = "none") +guides(color = guide_legend("Maternal\nheight", nrow=3)) + scale_x_continuous(limits=c(0,730), expand = c(0, 0), breaks = 0:6*30.41*4, labels = c(0, seq(4, 24, 4))) + theme(legend.key = element_blank()) +scale_y_continuous(limits=c(-2.4, -0.4), breaks = seq(-2.4, 0.4, 0.2), labels = round(seq(-2.4, 0.4, 0.2),1)) 
-p5 <- p5  + ggtitle("Stratified by\ncategories of maternal BMI") + theme(legend.position = pos,  legend.title=element_text(size=8), legend.text=element_text(size=6)) + guides(color = guide_legend("Maternal\nBMI", nrow=2)) + scale_color_manual(values=c(tableau10[6], "#c99a6b"), labels = c(">=18.5", "<18.5")) + scale_x_continuous(limits=c(0,730), expand = c(0, 0), breaks = 0:6*30.41*4, labels = c(0, seq(4, 24, 4))) + theme(legend.key = element_blank()) + scale_y_continuous(limits=c(-1.2, 0.4), breaks = seq(-1.2, 0.4, 0.2), labels = round(seq(-1.2, 0.4, 0.2),1)) 
-p6 <- p6  + ggtitle("Stratified by\ncategories of maternal BMI") +  theme(legend.position = "none")+ scale_x_continuous(limits=c(0,730), expand = c(0, 0), breaks = 0:6*30.41*4, labels = c(0, seq(4, 24, 4))) + theme(legend.key = element_blank())  +scale_y_continuous(limits=c(-2.4, -0.4), breaks = seq(-2.4, 0.4, 0.2), labels = round(seq(-2.4, 0.4, 0.2),1)) 
-
-
-
-# Combine plot objects
-
-require(cowplot)
-
-p_grid <- plot_grid(p1, p3, p2, p4, p5, p6,  labels = rep("",6), ncol = 2, align = 'v', axis = 'l')
-
-ggsave(p_grid, file=paste0(here(),"/figures/risk-factor/spline_grid.png"), width=10, height=10)
-
-
-ggsave(p1, file=paste0(here(),"/figures/risk-factor/spline_wlz_mwtkg.png"), width=10, height=5)
-ggsave(p2, file=paste0(here(),"/figures/risk-factor/spline_wlz_mhtcm.png"), width=10, height=5)
-ggsave(p3, file=paste0(here(),"/figures/risk-factor/spline_laz_mwtkg.png"), width=10, height=5)
-ggsave(p4, file=paste0(here(),"/figures/risk-factor/spline_laz_mhtcm.png"), width=10, height=5)
-ggsave(p5, file=paste0(here(),"/figures/risk-factor/spline_wlz_mbmi.png"), width=10, height=5)
-ggsave(p6, file=paste0(here(),"/figures/risk-factor/spline_laz_mbmi.png"), width=10, height=5)
+        file=paste0(BV_dir,"/figures/risk-factor/figure-data/rf_spline_data.RDS"))
 

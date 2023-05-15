@@ -34,6 +34,10 @@ source(paste0(here::here(), "/0-project-functions/0_descriptive_epi_stunt_functi
 
 d <- readRDS(paste0(ghapdata_dir, "stunting_data.rds"))
 
+# check included cohorts
+assert_that(setequal(unique(d$studyid), monthly_and_quarterly_cohorts),
+            msg = "Check data. Included cohorts do not match.")
+
 head(d)
 d <- d %>% subset(., select = -c(tr))
 
@@ -175,7 +179,8 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
     haz.cohort.vel
   )
   
-  saveRDS(haz.vel, file = paste0(here(), "/results/meanlaz_velocity", output_file_suffix, ".RDS"))
+  saveRDS(haz.vel, file = paste0(res_dir, "stunting/meanlaz_velocity", 
+                                 calc_method, output_file_suffix, ".RDS"))
   
   #----------------------------------------
   # monthly mean haz
@@ -183,6 +188,7 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
   dmon <- calc.monthly.agecat(data)
   monthly.haz.data <- summary.haz(dmon, method = calc_method)
   monthly.haz.region <-  dmon  %>% group_by(region) %>% do(summary.haz(., method = calc_method)$haz.res)
+  monthly.haz.country <-  dmon  %>% group_by(country) %>% do(summary.haz(., method = calc_method)$haz.res)
   monthly.haz.cohort <-
     monthly.haz.data$haz.cohort %>% subset(., select = c(cohort, region, agecat, nmeas,  meanhaz,  ci.lb,  ci.ub)) %>%
     rename(est = meanhaz,  lb = ci.lb,  ub = ci.ub)
@@ -190,24 +196,28 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
   monthly.haz <- bind_rows(
     data.frame(cohort = "pooled", region = "Overall", monthly.haz.data$haz.res),
     data.frame(cohort = "pooled", monthly.haz.region),
+    data.frame(cohort = "pooled-country", monthly.haz.country),
     monthly.haz.cohort
   )
   
   #----------------------------------------
   # Get monthly HAZ quantiles
   #----------------------------------------
-  quantile_d_cohort <- dmon %>% group_by(agecat, region, country, studyid) %>%
+  dmon <-  dmon %>% mutate(cohort = paste0(studyid, "-", country))
+  
+  quantile_d_cohort <- dmon %>% group_by(agecat, region, country, cohort) %>%
     mutate(fifth_perc = quantile(haz, probs = c(0.05))[[1]],
            fiftieth_perc = quantile(haz, probs = c(0.5))[[1]],
            ninetyfifth_perc = quantile(haz, probs = c(0.95))[[1]]) %>%
-    select(studyid, agecat, region, fifth_perc, fiftieth_perc, ninetyfifth_perc)
+    select(studyid, cohort, agecat, region, fifth_perc, fiftieth_perc, ninetyfifth_perc)
   
   quantile_d <- dmon %>% group_by(agecat,  country, region) %>%
     mutate(fifth_perc = quantile(haz, probs = c(0.05))[[1]],
            fiftieth_perc = quantile(haz, probs = c(0.5))[[1]],
            ninetyfifth_perc = quantile(haz, probs = c(0.95))[[1]]) %>%
-    mutate(studyid = "pooled") %>%
-    select(studyid, agecat, region, fifth_perc, fiftieth_perc, ninetyfifth_perc) 
+    mutate(studyid = "pooled", 
+           cohort = "pooled") %>%
+    select(studyid, cohort, agecat, region, fifth_perc, fiftieth_perc, ninetyfifth_perc) 
   
   quantile_d_overall <- dmon %>% 
     group_by(agecat) %>%
@@ -215,13 +225,15 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
               fiftieth_perc = quantile(haz, probs = c(0.5))[[1]],
               ninetyfifth_perc = quantile(haz, probs = c(0.95))[[1]]) %>%
     mutate(region = "Overall") %>%
-    mutate(studyid = "pooled") %>%
-    select(studyid, agecat, region, fifth_perc, fiftieth_perc, ninetyfifth_perc) 
+    mutate(studyid = "pooled", 
+           cohort = "pooled") %>%
+    select(studyid, cohort, agecat, region, fifth_perc, fiftieth_perc, ninetyfifth_perc) 
   
   # combine data
   quantiles <- bind_rows(quantile_d, quantile_d_overall,quantile_d_cohort)
   
-  saveRDS(quantiles,file = paste0(here(),"/results/quantile_data_stunting", output_file_suffix, ".RDS"))
+  saveRDS(quantiles,file = paste0(res_dir,"stunting/quantile_data_stunting", calc_method,
+                                  output_file_suffix, ".RDS"))
   
   ######################################################################
   # Incidence proportion
@@ -252,7 +264,7 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
   # stratify by birth
   #----------------------------------------
   ip_3.birthstrat = calc_ip(d3_birthstrat, agelst3_birthstrat, severe = FALSE)
-
+  
   #----------------------------------------
   # Incidence proportion 6 month intervals
   #----------------------------------------
@@ -263,13 +275,13 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
   # 3 month interval
   #----------------------------------------
   sev.ip3 = calc_ip(d3, agelst3, severe = TRUE)
-
+  
   #----------------------------------------
   # Incidence proportion of severe stunting
   # 6 month interval
   #----------------------------------------
   sev.ip6 = calc_ip(d6, agelst6, severe = TRUE)
-
+  
   ######################################################################
   # Cumulative incidence
   ######################################################################
@@ -288,7 +300,7 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
     )
     return(cuminc)
   }
-    
+  
   #----------------------------------------
   # Cumulative Incidence  - 3 month intervals
   #----------------------------------------
@@ -341,15 +353,19 @@ calc_outcomes = function(data, calc_method, output_file_suffix){
   shiny_desc_data$agecat <- as.factor(shiny_desc_data$agecat)
   
   shiny_desc_data$region <- factor(shiny_desc_data$region, levels=c("Overall", "Africa", "Latin America", "South Asia"))
-    
+  
   return(shiny_desc_data)
 }
 
+data = d
+calc_method = "REML"
+output_file_suffix = ""
+
 stunt_outcomes = calc_outcomes(data = d, calc_method = "REML", output_file_suffix = "")
-saveRDS(stunt_outcomes, file = paste0(res_dir,"shiny_desc_data_stunting_objects.RDS"))
+saveRDS(stunt_outcomes, file = paste0(res_dir,"stunting/shiny_desc_data_stunting_objects.RDS"))
 
 stunt_outcomes_monthly = calc_outcomes(data = monthly_d, calc_method = "REML", output_file_suffix = "_monthly24")
-saveRDS(stunt_outcomes_monthly, file =  paste0(res_dir, "shiny_desc_data_stunting_objects_monthly24.RDS"))
+saveRDS(stunt_outcomes_monthly, file =  paste0(res_dir, "stunting/shiny_desc_data_stunting_objects_monthly24.RDS"))
 
 stunt_outcomes_fe = calc_outcomes(data = d, calc_method = "FE", output_file_suffix = "_fe")
-saveRDS(stunt_outcomes_fe, file = paste0(res_dir,"shiny_desc_data_stunting_objects_fe.RDS"))
+saveRDS(stunt_outcomes_fe, file = paste0(res_dir,"stunting/shiny_desc_data_stunting_objects_fe.RDS"))

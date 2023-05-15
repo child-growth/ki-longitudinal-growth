@@ -3,10 +3,10 @@ rm(list=ls())
 source(paste0(here::here(), "/0-config.R"))
 
 #Load data
-d <- readRDS(paste0(here::here(),"/results/desc_data_cleaned.RDS"))
+d <- readRDS(paste0(BV_dir,"/results/desc_data_cleaned.rds"))
 
 #Subset to primary analysis
-d <- d %>% filter(analysis=="No Kenaba birth", (pooling!="country" | is.na(pooling)), is.na(country), cohort=="pooled")
+d <- d %>% filter(analysis=="No Kenaba birth", (pooling!="country" | is.na(pooling)), is.na(country))
 
 
 
@@ -16,7 +16,15 @@ d$nmeas.f <- gsub("N=","",d$nmeas.f)
 d$nstudy.f <- gsub(" studies","",d$nstudy.f)
 d$nmeas.f <- gsub(" children","",d$nmeas.f)
 
-
+scale_estimates <- function(d) {
+  d = d %>% mutate(
+    est = ifelse(cohort!="pooled", est*100, est),
+    lb = ifelse(cohort!="pooled", lb*100, lb),
+    ub = ifelse(cohort!="pooled", ub*100, ub)
+  )
+  return(d)
+}
+d <- scale_estimates(d)
 
 #-------------------------------------------------------------------------------------------
 # Mean WLZ by month 
@@ -60,20 +68,19 @@ p <- ggplot(df,aes(y=est,x=agecat, group=region)) +
   ggtitle("") +
   theme(legend.position="right")
 
-ggsave(p, file=here::here("/8-supplement/2-wasting/figure-copies/WLZ_by_region-no-Kenaba-BW.png"), width=10, height=4)
+ggsave(p, file=here::here("/figures/wasting/no-kenaba-BW/WLZ_by_region-no-Kenaba-BW.png"), width=10, height=4)
 
 
 
 #-------------------------------------------------------------------------------------------
 # Wasting prevalence
 #-------------------------------------------------------------------------------------------
-prev_plot <- ki_desc_plot(d,
+prev_plot <- ki_desc_flurry_plot(d,
                    Disease="Wasting",
                    Measure="Prevalence", 
                    Birth="yes", 
                    Severe="no", 
                    Age_range="3 months", 
-                   Cohort="pooled",
                    xlabel="Child age, months",
                    ylabel='Point prevalence (95% CI)',
                    yrange=c(0,31),
@@ -84,7 +91,7 @@ prev_plot <- ki_desc_plot(d,
 
 
 # save plot and underlying data
-ggsave(prev_plot[[1]], file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-wast-prev-no-Kenaba-BW.png"), width=14, height=3)
+ggsave(prev_plot[[1]], file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-wast-prev-no-Kenaba-BW.png"), width=14, height=3)
 
 saveRDS(prev_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-wast-prev-no-Kenaba-BW.RDS"))
 
@@ -94,23 +101,38 @@ saveRDS(prev_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-wast-prev-no-Ke
 #-------------------------------------------------------------------------------------------
 # Wasting cumulative incidence
 #-------------------------------------------------------------------------------------------
-ci_plot <- ki_combo_plot(d,
-                        Disease="Wasting",
-                        Measure=c("Cumulative incidence", "Incidence proportion"), 
-                        Birth="yes", 
-                        Severe="no", 
-                        Age_range="3 months", 
-                        Cohort="pooled",
-                        xlabel="Child age, months",
-                    yrange=c(0,55),
-                    returnData=T)
 
-
+# TODO: add cumulative incidence
+ip_only_plot <- ki_ip_flurry_plot(d,
+                                  Disease="Wasting",
+                                  Measure="Incidence proportion",
+                                  # Measure=c("Cumulative incidence", "Incidence proportion"), 
+                                  Birth="yes", 
+                                  Severe="no", 
+                                  Age_range="3 months", 
+                                  xlabel="Child age, months",
+                                  returnData=T)
 
 # save plot and underlying data
-ggsave(ci_plot[[1]], file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-wast-ci-no-Kenaba-BW.png"), width=14, height=3)
+ggsave(ip_only_plot[[1]], file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-wast-ci-no-Kenaba-BW.png"), width=14, height=3)
 
-saveRDS(ci_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-wast-ci-no-Kenaba-BW.RDS"))
+saveRDS(ip_only_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-wast-ci-no-Kenaba-BW.RDS"))
+
+# ci_plot <- ki_combo_plot(d,
+#                         Disease="Wasting",
+#                         Measure=c("Cumulative incidence", "Incidence proportion"), 
+#                         Birth="yes", 
+#                         Severe="no", 
+#                         Age_range="3 months", 
+#                         Cohort="pooled",
+#                         xlabel="Child age, months",
+#                     yrange=c(0,55),
+#                     returnData=T)
+#
+# save plot and underlying data
+# ggsave(ci_plot[[1]], file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-wast-ci-no-Kenaba-BW.png"), width=14, height=3)
+# 
+# saveRDS(ci_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-wast-ci-no-Kenaba-BW.RDS"))
 
 
 
@@ -211,7 +233,7 @@ inc_plot <- inc_combo_plot(d,
 
 
 # save plot and underlying data
-ggsave(inc_plot$plot, file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-wast-ir-no-Kenaba-BW.png"), width=14, height=3)
+ggsave(inc_plot$plot, file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-wast-ir-no-Kenaba-BW.png"), width=14, height=3)
 
 saveRDS(inc_plot$data, file=paste0(figdata_dir_wasting,"figdata-wast-ir-no-Kenaba-BW.RDS"))
 
@@ -221,7 +243,6 @@ saveRDS(inc_plot$data, file=paste0(figdata_dir_wasting,"figdata-wast-ir-no-Kenab
 #-------------------------------------------------------------------------------------------
 
 rec_combo_plot <- function(d, Disease, Measure, Birth, Severe, Age_range, 
-                          Cohort="pooled",
                           xlabel="Age at wasting episode onset",
                           ylabel="",
                           yrange=c(0,90),
@@ -234,7 +255,6 @@ rec_combo_plot <- function(d, Disease, Measure, Birth, Severe, Age_range,
       birth == Birth &
       severe == Severe &
       age_range %in% Age_range &
-      cohort == Cohort &
       !is.na(region) & !is.na(agecat)
   )
   df <- droplevels(df)
@@ -257,12 +277,30 @@ rec_combo_plot <- function(d, Disease, Measure, Birth, Severe, Age_range,
   df$agecat <- gsub(" months", "", df$agecat)
   df$agecat <- factor(df$agecat, levels=unique(df$agecat))
 
+  ### new
+  df <- df %>% mutate(ispooled = as.factor(ifelse(cohort=="pooled", "yes", "no")))
+  
+  if (min(df$lb) < 0) {
+    print("Warning: some lower bounds < 0")
+  }
+  
   p <- ggplot(df,aes(y=est,x=agecat)) +
+    
+    # pooled 
     geom_errorbar(aes(color=region, 
                       group=interaction(age_range, region), ymin=lb, ymax=ub), 
-                  width = 0, position = position_dodge(0.5)) +
-    geom_point(aes(shape=age_range, fill=region, color=region, group=interaction(age_range, region)
-    ), size = 2, position = position_dodge(0.5)) +
+                  width = 0, position = position_dodge(0.5),
+                  data = df %>% filter(ispooled == "yes")) +
+    geom_point(aes(shape=age_range, fill=region, color=region, group=interaction(age_range, region)), 
+               size = 2, position = position_dodge(0.5),
+               data = df %>% filter(ispooled == "yes")) +
+    
+    # cohort-stratified
+    geom_point(color = "#878787", fill = "#878787", size = 1.5, 
+               data = df %>% filter(ispooled == "no"),
+               position = position_jitter(width = 0.15), alpha = 0.25) +
+
+
     scale_color_manual(values=tableau11,
                        guide = FALSE) +
     scale_shape_manual(values = c(16, 17, 18),
@@ -309,7 +347,6 @@ rec_plot <- rec_combo_plot(d,
                    Birth="yes", 
                    Severe="no", 
                    Age_range=c("30 days","60 days","90 days"), 
-                   Cohort="pooled",
                    xlabel="Child age, months",
                    ylabel='Percent recovered\n(95% CI)',
                    yrange=c(0,100),
@@ -318,32 +355,29 @@ rec_plot <- rec_combo_plot(d,
 
 
 # save plot and underlying data
-ggsave(rec_plot[[1]], file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-wast-rec-no-Kenaba-BW.png"), width=14, height=4.5)
+ggsave(rec_plot[[1]], file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-wast-rec-no-Kenaba-BW.png"), width=14, height=4.5)
 saveRDS(rec_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-wast-rec-no-Kenaba-BW.RDS"))
 
 #-------------------------------------------------------------------------------------------
 # Persistent Wasting 
 #-------------------------------------------------------------------------------------------
 
-perswast_plot <- ki_desc_plot(d,
+perswast_plot <- ki_desc_flurry_plot(d,
                    Disease="Wasting",
                    Measure="Persistent wasting", 
                    Birth="yes", 
                    Severe="no", 
                    Age_range="6 months", 
-                   Cohort="pooled",
                    xlabel="Child age, months",
+                   #scale_x_continuous(limits = c(0,24), breaks = seq(0,24,2), labels = seq(0,24,2)), 
                    ylabel = 'Proportion (%)',
                    yrange=c(0,20),
                    returnData=T)
 
 # save plot and underlying data
-ggsave(perswast_plot$plot, file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-pers-wast-no-Kenaba-BW.png"), width=10, height=5)
+ggsave(perswast_plot$plot, file=paste0(BV_dir,"/figures/wasting/no-kenaba-BW/fig-pers-wast-no-Kenaba-BW.png"), width=20, height=5)
 
 saveRDS(perswast_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-pers-wast-no-Kenaba-BW.RDS"))
-
-
-
 
 
 #-------------------------------------------------------------------------------------------
@@ -363,9 +397,8 @@ co_plot <- ki_desc_plot(d,
 
 
 
-
 # save plot and underlying data
-ggsave(co_plot[[1]], file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-co-prev-no-Kenaba-BW.png"), width=14, height=3)
+ggsave(co_plot[[1]], file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-co-prev-no-Kenaba-BW.png"), width=14, height=3)
 
 saveRDS(co_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-co-prev-no-Kenaba-BW.RDS"))
 
@@ -388,7 +421,7 @@ underweight_plot <- ki_desc_plot(d,
 
 
 # save plot and underlying data
-ggsave(underweight_plot[[1]], file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-uw-prev-no-Kenaba-BW.png"), width=14, height=3)
+ggsave(underweight_plot[[1]], file=paste0(here::here(),"/figures/wasting/no-kenaba-BW/fig-uw-prev-no-Kenaba-BW.png"), width=14, height=3)
 
 saveRDS(underweight_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-uw-prev-no-Kenaba-BW.RDS"))
 
@@ -411,7 +444,7 @@ sevwast_plot <- ki_desc_plot(d,
 
 
 # save plot and underlying data
-ggsave(sevwast_plot[[1]], file=paste0(here::here(),"/8-supplement/2-wasting/figure-copies/fig-sev-wast-no-Kenaba-BW.png"), width=14, height=3)
+ggsave(sevwast_plot[[1]], file=paste0(BV_dir,"/figures/wasting/no-kenaba-BW/fig-sev-wast-no-Kenaba-BW.png"), width=14, height=3)
 
 saveRDS(sevwast_plot[[2]], file=paste0(figdata_dir_wasting,"figdata-sev-wast-no-Kenaba-BW.RDS"))
 

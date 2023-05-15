@@ -16,6 +16,15 @@ source(paste0(here::here(),"/0-project-functions/0_descriptive_epi_stunt_functio
 
 d <- readRDS(paste0(ghapdata_dir, "velocity_longfmt.rds"))
 
+#-------------------------------------------
+# check included cohorts
+#-------------------------------------------
+
+vel_cohorts = monthly_and_quarterly_cohorts
+assert_that(setequal(unique(d$studyid), vel_cohorts),
+            msg = "Check data. Included cohorts do not match.")
+
+setdiff(monthly_and_quarterly_cohorts, unique(d$studyid))
 
 #Summarize N's in study
 d %>% group_by(studyid, country, subjid) %>% slice(1) %>% ungroup() %>% summarize(N=n())
@@ -29,7 +38,7 @@ table(d$diffcat)
 d <- d %>% rename(agecat = diffcat) %>%
   group_by(studyid, country, agecat, ycat, sex) %>%
   summarise(mean=mean(y_rate, na.rm=T), var=var(y_rate, na.rm=T), sd=sd(y_rate, na.rm=T), n=n()) %>%
-  mutate(ci.lb=mean - 1.96 * sd, ci.ub=mean + 1.96 * sd) %>% 
+  mutate(ci.lb=mean - 1.96 * sd/sqrt(n), ci.ub=mean + 1.96 * sd/sqrt(n)) %>% 
   mutate(region = case_when(
     country=="BANGLADESH" | country=="INDIA"|
       country=="NEPAL" | country=="PAKISTAN"|
@@ -205,4 +214,29 @@ pooled_vel_sub <- rbind(
 
 saveRDS(pooled_vel_sub,
         file=paste0(res_dir,"stunting/pool_vel_sub.RDS"))
+
+
+#Get I2 median/IQR
+pooled_vel_sub %>% filter(pooled==1, ycat=="lencm") %>%
+  group_by(region) %>%
+  summarise(quantile = c("Median","Q1", "Q3"),
+            I2 = quantile(I2, c(0.5, 0.25, 0.75), na.rm=TRUE)) %>%
+  spread(quantile, I2) %>%
+  mutate(region=factor(region, levels=c("Overall","Africa","Latin America","Asia"))) %>%
+  arrange(region)
+
+pooled_vel_sub %>% filter(pooled==1, ycat=="haz") %>%
+  group_by(region) %>%
+  summarise(quantile = c("Median","Q1", "Q3"),
+            I2 = quantile(I2, c(0.5, 0.25, 0.75), na.rm=TRUE)) %>%
+  spread(quantile, I2) %>%
+  mutate(region=factor(region, levels=c("Overall","Africa","Latin America","Asia"))) %>%
+  arrange(region)
+
+
+
+
+
+
+
 

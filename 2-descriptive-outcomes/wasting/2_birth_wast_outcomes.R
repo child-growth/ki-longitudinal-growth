@@ -12,6 +12,8 @@ load(paste0(ghapdata_dir, "Wasting_inc_data.RData"))
 co <- readRDS(paste0(ghapdata_dir, "rf_co_occurrence_data.rds"))
 
 
+
+
 age_cutoff = 7
 
 
@@ -25,7 +27,54 @@ d <- d %>% group_by(studyid, subjid) %>% arrange(studyid, subjid, agedays) %>%
        filter(age_enrol <= age_cutoff) %>%
        mutate(born_wast = 1 * (first(whz) < (-2))) 
 table(d$born_wast)
-d %>% group_by(born_wast) %>% summarize(length(unique(paste0(studyid, subjid))))
+length(unique(paste0(d$studyid,"-",d$country)))
+d %>% group_by(born_wast) %>% summarize(length(unique(paste0(studyid, subjid))), n())
+
+#How many of those who had birthweight measured and who did NOT have wasting at birth also had incident wasting in the first 60 days? 
+df <- d %>% filter(agedays < 2* 30.4167, born_wast==0) %>% group_by(studyid, subjid) %>% mutate(Nmeas=n())
+table(df$Nmeas)
+df %>% ungroup() %>% summarize(length(unique(paste0(studyid, subjid))), n())
+
+df <- df %>% filter(Nmeas>2, agedays > 7)  %>% group_by(studyid, country) %>% mutate(N=n(), wast=1*(whz < -2))
+summary(df$whz)
+prop.table(table(df$whz < -2)) * 100
+df2 <- df %>% group_by(studyid, country, subjid) %>% summarise(wast_inc=1*(min(whz)< -2), N=n())
+prop.table(table(df2$wast_inc)) * 100
+
+
+#Get the proportion not wasted by next measurement
+
+df_bornwast_rec <- d %>% filter(born_wast==1) %>% group_by(studyid, country, subjid) %>% arrange(studyid, subjid, agedays) %>% 
+  filter(agedays!=first(agedays)) %>% filter(agedays==first(agedays)) 
+prop.table(table(df_bornwast_rec$whz < -2))*100
+
+dprev_bornwast_rec <- df_bornwast_rec %>% group_by(studyid, country) %>% summarise(N=n(), not_wast=sum(whz > -2), agecat="1 month")
+prev.res_bornwast_rec= fit.rma(data=dprev_bornwast_rec,ni="N", xi="not_wast",age="1 month",measure="PLO",nlab="children", method="REML")
+prev.res_bornwast_rec
+
+#prevalence
+dprev <- df %>% group_by(studyid, country) %>% summarise(N=n(), wast=sum(wast), agecat="0-2 months")
+prev.res= fit.rma(data=dprev,ni="N", xi="wast",age="0-2 months",measure="PLO",nlab="children", method="REML")
+prev.res$est=as.numeric(prev.res$est)
+prev.res$lb=as.numeric(prev.res$lb)
+prev.res$ub=as.numeric(prev.res$ub)
+prev.res = prev.res %>%
+  mutate(est=est*100,lb=lb*100,ub=ub*100)
+prev.res
+
+#CI
+# estimate random effects, format results
+dCI <- df2 %>% group_by(studyid, country) %>% summarise(N=n(), ncases=sum(wast_inc), agecat="0-2 months")
+ci.res=fit.rma(data=dCI,ni="N", xi="ncases",age="0-2 months",measure="PLO",nlab=" measurements", method="REML")
+ci.res$est=as.numeric(ci.res$est)
+ci.res$lb=as.numeric(ci.res$lb)
+ci.res$ub=as.numeric(ci.res$ub)
+ci.res = ci.res %>%
+  mutate(est=est*100,lb=lb*100,ub=ub*100)
+ci.res$ptest.f=sprintf("%0.0f",ci.res$est)
+ci.res
+
+
 
 
 #Subset to co-occurrence to monthly
@@ -55,7 +104,7 @@ set.seed(12345)
 for(i in 1:length(unique(d$born_wast))){
   cat=unique(d$born_wast)[i]
   di <- filter(d, born_wast==cat)
-  fiti <- mgcv::gam(whz~s(agedays,bs="cr", k=10),data=di)
+  fiti <- mgcv::gam(whz~s(agedays,bs="cr"),data=di)
   range=min(di$agedays):max(di$agedays)
   agedays=1:(diff(range(range))+1)
   newd <- data.frame(agedays=range)
@@ -70,6 +119,43 @@ plotdf
 plotdf$born_wast <- factor(ifelse(plotdf$born_wast==1, "Born wasted", "Not born wasted"))
 
 saveRDS(plotdf, paste0(ghapdata_dir,"/birthwast_strat_whz_plot_data.rds"))
+
+#Make a cohort-stratified dataset
+# estimate a pooled fit, over birth wasting status
+df <- d %>% group_by(studyid, country) %>% mutate(N=length(unique(born_wast))) %>% 
+  filter(N==2) %>% droplevels()
+
+plotdf <- NULL
+set.seed(12345)
+for(i in 1:length(unique(df$born_wast))){
+  for(j in 1:length(unique(df$studyid))){
+    cat=unique(df$born_wast)[i]
+    study=unique(df$studyid)[j]
+    subdf <- filter(df, born_wast==cat, studyid==study)
+    for(k in 1:length(unique(subdf$country))){
+      country=unique(subdf$country)[k]
+      di <- filter(subdf, country==country)
+
+      fiti <- NULL
+  try(fiti <- mgcv::gam(whz~s(agedays,bs="cr"),data=di))
+  range=min(di$agedays):max(di$agedays)
+  agedays=1:(diff(range(range))+1)
+  newd <- data.frame(agedays=range)
+  try(fitci <- gamCI(m=fiti,newdata=newd,nreps=1000))
+  dfit <- data.frame(studyid=study, country=country,
+                     born_wast=cat, agedays=agedays,
+                     fit=fitci$fit,fit_se=fitci$se.fit,
+                     fit_lb=fitci$lwrS,fit_ub=fitci$uprS)
+  plotdf<-rbind(plotdf,dfit)
+    }
+  }  
+}
+
+plotdf
+
+plotdf$born_wast <- factor(ifelse(plotdf$born_wast==1, "Born wasted", "Not born wasted"))
+
+saveRDS(plotdf, paste0(ghapdata_dir,"/birthwast_and_cohort_strat_whz_plot_data.rds"))
 
 
 
@@ -91,17 +177,21 @@ co <- co %>% filter(agecat!="0-6 months")
 co$agecat <- "6-24 months"
 co$agecat <- factor(co$agecat)
 
+
+#Drop studies with less than Nmin meas
+Nmin=6
+
 #mean whz
-whz.res <- d %>% group_by(born_wast) %>% do(summary.whz(., N_filter=1)$whz.res)
+whz.res <- d %>% group_by(born_wast) %>% do(summary.whz(., N_filter=Nmin)$whz.res)
 whz.res
 
 
 #prevalence
-prev.res <- d %>% group_by(born_wast) %>% do(summary.prev.whz(., N_filter=1)$prev.res)
+prev.res <- d %>% group_by(born_wast) %>% do(summary.prev.whz(., N_filter=Nmin)$prev.res)
 prev.res
 
 #CI
-ci.res <- d %>% group_by(born_wast) %>% do(summary.wast.ci(., N_filter=1, age.range=NULL)$ci.res)
+ci.res <- d %>% group_by(born_wast) %>% do(summary.wast.ci(., N_filter=Nmin, age.range=NULL)$ci.res)
 ci.res
 
 
@@ -114,7 +204,7 @@ ir.res
 
 
 #Persistant wasting
-perswast.res <- d %>% group_by(born_wast) %>% do(summary.perswast(., N_filter=1)$pers.res)
+perswast.res <- d %>% group_by(born_wast) %>% do(summary.perswast(., N_filter=Nmin)$pers.res)
 perswast.res
 
 
@@ -122,8 +212,22 @@ perswast.res
 #co-occurrent wasting and stunting
 co.res <- co %>% group_by(born_wast) %>% 
   filter(agedays > 17*30.4167 & agedays < 19*30.4167) %>% 
-  do(summary.prev.co(., N_filter=1)$prev.res)
+  do(summary.prev.co(., N_filter=Nmin)$prev.res)
 co.res
+
+
+#Get cohort-specific estimates
+whz.res.cohort <- d %>% group_by(born_wast) %>% do(summary.whz(., N_filter=Nmin)$whz.cohort)
+prev.res.cohort <- d %>% group_by(born_wast) %>% do(summary.prev.whz(., N_filter=Nmin)$prev.cohort) 
+ci.res.cohort <- d %>% group_by(born_wast) %>% do(summary.wast.ci(., N_filter=Nmin, age.range=NULL)$ci.cohort)
+ir.res.cohort <- d %>% group_by(born_wast) %>% do(summary.ir(., Nchild_filter=1, ptime_filter=1)$ir.cohort)
+ir.res.cohort$yi <- ir.res.cohort$yi * 1000
+ir.res.cohort$ci.lb <- ir.res.cohort$ci.lb  * 1000
+ir.res.cohort$ci.ub <- ir.res.cohort$ci.ub * 1000
+perswast.res.cohort <- d %>% group_by(born_wast) %>% do(summary.perswast(., N_filter=Nmin)$pers.cohort)
+co.res.cohort <- co %>% group_by(born_wast) %>% 
+  filter(agedays > 17*30.4167 & agedays < 19*30.4167) %>% 
+  do(summary.prev.co(., N_filter=Nmin)$prev.cohort)
 
 
 res <- data.frame(
@@ -132,8 +236,87 @@ res <- data.frame(
 )
 res
 
-saveRDS(res, file = paste0(here(),"/results/bw_longterm_res.rds"))
+
+res.cohort <- bind_rows(
+  data.frame(measure= "Mean WLZ",whz.res.cohort),
+  data.frame(measure= "Wasting prevalence",prev.res.cohort),
+  data.frame(measure= "Wasting cumulative incidence",ci.res.cohort),
+  data.frame(measure= "Wasting incidence rate",ir.res.cohort),
+  data.frame(measure= "Persistent wasting",perswast.res.cohort),
+  data.frame(measure= "Co-occurrent wasting and stunting",co.res.cohort)
+) %>%
+  mutate(est=yi*100,  lb=ci.lb*100, ub=ci.ub*100, cohort=paste0(studyid,"-",country)) %>%
+  select(measure, born_wast,cohort, studyid, country, est, lb, ub, nmeas) %>%
+  group_by(cohort, measure) %>% mutate(N=n()) %>% filter(N==2)
+  
+head(res.cohort)
+as.data.frame(res.cohort[res.cohort$measure=="Persistent wasting",])
+
+saveRDS(res, file = paste0(BV_dir,"/results/bw_longterm_res.rds"))
+saveRDS(res.cohort, file = paste0(BV_dir,"/results/bw_longterm_res_cohort.rds"))
+
+
+
+#-------------------------------------------------------------------------------------------------
+#Get data for tmle analysis
+#-------------------------------------------------------------------------------------------------
+
+whz.res <-d %>% group_by(born_wast) %>% do(summary.whz(., N_filter=Nmin)$d) %>% add_column(parameter="whz")
+prev.res.data <- d %>% group_by(born_wast) %>% do(summary.prev.whz(., N_filter=Nmin)$d) %>% add_column(parameter="prev")
+ci.res.data <- d %>% group_by(born_wast) %>% do(summary.wast.ci(., N_filter=Nmin, age.range=NULL)$d) %>% add_column(parameter="ci")
+ir.res.data <- d %>% group_by(born_wast) %>% do(summary.ir(., Nchild_filter=1, ptime_filter=1)$d) %>% add_column(parameter="ir")
+perswast.res.data <- d %>% group_by(born_wast) %>% do(summary.perswast(., N_filter=Nmin)$d) %>% add_column(parameter="perswast")
+co.res.data <- co %>% group_by(born_wast) %>% 
+  filter(agedays > 17*30.4167 & agedays < 19*30.4167) %>% 
+  do(summary.prev.co(., N_filter=Nmin)$d) %>% add_column(parameter="co")
+
+d <- whz.res %>% mutate(id=subjid)
+save(d, file=paste0(ghapdata_dir,"birth_strat_whz_rf.Rdata"))
+d <- prev.res.data %>% mutate(id=subjid)
+save(d, file=paste0(ghapdata_dir,"birth_strat_prev_rf.Rdata"))
+d <- ci.res.data %>% mutate(id=subjid)
+save(d, file=paste0(ghapdata_dir,"birth_strat_ci_rf.Rdata"))
+d <- ir.res.data %>% mutate(id=subjid)
+save(d, file=paste0(ghapdata_dir,"birth_strat_ir_rf.Rdata"))
+d <- perswast.res.data %>% mutate(id=subjid)
+save(d, file=paste0(ghapdata_dir,"birth_strat_perswast_rf.Rdata"))
+d <- co.res.data %>% mutate(co=1*(wasted==1&stunted==1), id=subjid)
+save(d, file=paste0(ghapdata_dir,"birth_strat_co_rf.Rdata"))
 
 
 
 
+#Save analysis specifications
+load(paste0(BV_dir,"/results/adjustment_sets_list.Rdata"))
+A <- names(adjustment_sets)
+Avars <- c( "sex",  "brthmon", "month", names(adjustment_sets))
+
+specify_rf_analysis <- function(A, Y, file,  W=NULL, V= c("agecat","studyid","country"), id="id", adj_sets=adjustment_sets){
+  
+  analyses <- expand.grid(A=A,Y=Y, stringsAsFactors = FALSE, KEEP.OUT.ATTRS = FALSE)
+  analyses$id <- id
+  analyses$strata <- list(V)
+  if(is.null(W)){analyses$W <- adj_sets[analyses$A]}else{
+    analyses$W <- list(W)
+  }
+  names(analyses$W) <- NULL
+  analyses$file <- file
+  
+  return(analyses)
+}
+
+
+birthwas_strat_whz <- specify_rf_analysis(A="born_wast", Y=c("whz"), file="birth_strat_whz_rf.Rdata")
+birthwas_strat_wast <- specify_rf_analysis(A="born_wast", Y=c("wasted"), file="birth_strat_prev_rf.Rdata")
+birthwas_strat_ever_wast <- specify_rf_analysis(A="born_wast", Y=c("ever_wasted"), file="birth_strat_ci_rf.Rdata")
+birthwas_strat_perswast <- specify_rf_analysis(A="born_wast", Y=c("pers_wast"), file="birth_strat_perswast_rf.Rdata")
+birthwas_strat_co <- specify_rf_analysis(A="born_wast", Y=c("co"), file="birth_strat_co_rf.Rdata")
+
+
+
+
+#bind together datasets
+analyses <- rbind(birthwas_strat_whz, birthwas_strat_wast, birthwas_strat_ever_wast, birthwas_strat_perswast, birthwas_strat_co)
+
+#Save analysis specification
+save(analyses, file=paste0(here(),"/4-longbow-tmle-analysis/analysis specification/birthwast_strat_analyses.rdata"))

@@ -18,8 +18,7 @@ source(here("5-visualizations/risk factors/fig-wlz-quart-laz-velocity.R"))
 source(here("5-visualizations/risk factors/fig-wlz-quart-stunting.R"))
 
 
-source(here("5-visualizations/risk factors/fig-mortality-plots.R"))
-source(here("5-visualizations/risk factors/fig-mortality-timing.R"))
+source(here("5-visualizations/risk factors/fig-mortality-plot_prim.R"))
 
 
 #Combine plots
@@ -40,23 +39,11 @@ source(here("5-visualizations/risk factors/fig-adjustment-effect-by-cov-number.R
 source(here("5-visualizations/risk factors/fig-mediation-analysis.R"))
 source(here("5-visualizations/risk factors/fig-EValues.R"))
 
-
-#Supplimental figures
-source(here("5-visualizations/risk factors/fig-kaplan-meier-curves.R"))
-
+source(here("5-visualizations/risk factors/fig-pooled-RR-plots.R"))
 source(here("5-visualizations/risk factors/fig-RR-plots.R"))
 
-source(here("5-visualizations/risk factors/fig-spline-plots_sensitivity.R"))
-source(here("5-visualizations/risk factors/fig-sig-heatmap-FE.R"))
-
-source(here("5-visualizations/risk factors/fig-pooled-RR-plots.R"))
-
-source('~/HBGDki/ki-longitudinal-manuscripts/5-visualizations/risk factors/fig-muac-mort.R', echo=TRUE)
-source('~/HBGDki/ki-longitudinal-manuscripts/5-visualizations/risk factors/fig-mortality-plots-sens-birth.R', echo=TRUE)
-source('~/HBGDki/ki-longitudinal-manuscripts/5-visualizations/risk factors/fig-mortality-plots-sens.R', echo=TRUE)
-source('~/HBGDki/ki-longitudinal-manuscripts/5-visualizations/risk factors/fig-mortality-plots-sens2.R', echo=TRUE)
-source('~/HBGDki/ki-longitudinal-manuscripts/5-visualizations/risk factors/fig-mortality-plots-sens3.R', echo=TRUE)
-source('~/HBGDki/ki-longitudinal-manuscripts/5-visualizations/risk factors/fig-muac-mort.R', echo=TRUE)
 
 
-
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+#-restart checking at fig-spline-plots-birthord, alphabetical order
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
