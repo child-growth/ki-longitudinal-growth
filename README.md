@@ -1,4 +1,7 @@
 # ki-longitudinal-manuscripts
+
+[![DOI](https://zenodo.org/badge/269440448.svg)](https://zenodo.org/badge/latestdoi/269440448)
+
 This repository includes scripts to replicate the analyses included in the UC Berkeley team's analysis of wasting and stunting as part of the Bill and Melinda Gates Foundation's KI project.
 
 ### Directory structure
@@ -15,8 +18,7 @@ This repository includes scripts to replicate the analyses included in the UC Be
 
 **`5-visualizations`** :  scripts that produce figures
 
-* risk factors
-    *  [Andrew to add]
+
 * shared
     *  `fig-CONSORT-figure1`  corresponds to stunting and wasting manuscripts __Extended Fig 1__
 * stunting
@@ -46,12 +48,11 @@ This repository includes scripts to replicate the analyses included in the UC Be
     * `fig-co-flow.R` corresponds to wasting manuscript __Fig 5b__
     * `fig-co-initial-onset.R` in progress: creates plot of initial onset of wasting and stunting in children with both
     * `fig-wasting-traj.R` archived; not used
-
+* risk factors
+    *  [Andrew to add]
     
-**`data`** : folder containing datasets that live off GHAP (agregate results or external data, but no subject-level data)
 
 **`figures`** : folder containing figure outputs from scripts from `5-visualizations`  
-
 **`results`** : folder containing output from analyses that do not contain identifiers
 
 
