@@ -224,7 +224,7 @@ p_inc = ggplot(plot_combine ,
   scale_color_manual("", values = c(pink_green[c(4,5)],"#ADDE66")) +
 
   xlab("Child age, months") +
-  ylab("Incidence proportion (%)") +
+  ylab("Proportion (%)") +
   theme(legend.position = "none",
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),

@@ -99,7 +99,7 @@ p_inc = ggplot(plot_combine ,
   scale_x_continuous(limits = c(0,15), breaks = seq(0,15,3), labels = seq(0,15,3)) +
 
   xlab("Child age, months") +
-  ylab("Incidence proportion (%)") +
+  ylab("Proportion (%)") +
   theme(legend.position = "none",
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),
@@ -138,7 +138,7 @@ make_inc_plot = function(data, ymin, ymax, ybreaks, color, xlab_include, ylab_in
                        labels = seq(ymin,ymax,ybreaks)) +
    
     xlab("Child age, months") +
-    ylab("Incidence proportion (%)") +
+    ylab("Proportion (%)") +
     theme(legend.position = "none",
           panel.grid.minor = element_blank(),
           panel.grid.major.x = element_blank(),

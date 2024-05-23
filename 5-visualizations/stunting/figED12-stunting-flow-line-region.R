@@ -129,7 +129,7 @@ p_inc = ggplot(plot_combine ,
   # scale_x_continuous(limits = c(0,27), breaks = seq(0,27,3), labels = seq(0,27,3)) +
 
   xlab("Child age, months") +
-  ylab("Incidence proportion (%)") +
+  ylab("Proportion (%)") +
   theme(legend.position = "bottom",
         panel.grid.minor = element_blank(),
         panel.grid.major.x = element_blank(),

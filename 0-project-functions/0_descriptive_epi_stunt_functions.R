@@ -396,13 +396,15 @@ summary.stunt.incprop <- function(d, severe.stunted=F, agelist=list("0-3 months"
   d <- d %>% group_by(studyid, country, subjid) %>% 
     mutate(stunt= haz < threshold, 
            stuntid = ifelse(stunt, measid, 9999),
-           stunt_inc = 1 * (stunt & stuntid==min(stuntid))) 
+           stunt_inc = 1 * (stunt & stuntid==min(stuntid)),
+           prior_stunt=cumsum(stunt_inc))  
   
   evs <- d %>%
     group_by(studyid, country, agecat, subjid) %>%
     filter(!is.na(agecat)) %>%
-    summarise(numstunt = sum(stunt_inc, na.rm=T)) %>%
-    mutate(ever_stunted = 1*(numstunt>0))
+    summarise(numstunt = sum(stunt_inc, na.rm=T),
+              any_stunt = max(prior_stunt)) %>%
+    mutate(stunt_inc = 1*(numstunt>0))
   
   # count incident cases per study by age
   # exclude time points if number of measurements per age
@@ -412,8 +414,8 @@ summary.stunt.incprop <- function(d, severe.stunted=F, agelist=list("0-3 months"
     summarise(
       nchild=length(unique(subjid)),
       nstudy=length(unique(studyid)),
-      ncases=sum(ever_stunted),
-      N=sum(length(ever_stunted))) %>%
+      ncases=sum(stunt_inc),
+      N=sum(any_stunt==0)+sum(stunt_inc)) %>%
     filter(N>=50)
   
   cuminc.data <- droplevels(cuminc.data)
@@ -442,7 +444,6 @@ summary.stunt.incprop <- function(d, severe.stunted=F, agelist=list("0-3 months"
   
   return(list(ip.data=cuminc.data, ip.res=ci.res, ip.cohort=ci.cohort))
 }
-
 
 ##############################################
 # summary.stunt.incprop
